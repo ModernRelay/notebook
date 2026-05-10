@@ -1,0 +1,30 @@
+{
+  "name": "@omnigraph/executor",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Sequential notebook executor — duck-typed against any source with a `read()` method.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@json-render/core": "^0.19.0",
+    "@omnigraph/catalog": "workspace:*",
+    "@omnigraph/notebook-spec": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
+  }
+}

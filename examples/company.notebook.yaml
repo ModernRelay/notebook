@@ -1,0 +1,198 @@
+version: 1
+title: Company context (mock)
+fixture: ./fixtures/company-context.json
+
+# Per-element approval demo: pick a policy → see its clauses, each with
+# inline Approve/Reject buttons. The buttons fire the registered approve/
+# reject actions with `{ id: row.id }`; outcomes accumulate at /approvals/
+# and the ActionList badges each row from that state.
+#
+# Other demos remain: a status filter on Decisions, a signal→decision→actor
+# path, evidence trail, hub Decision neighborhood, actor portfolio.
+
+cells:
+
+  # ── Filter (driver of decisions-by-urgency) ────────────────────────────
+
+  - id: filter-decision-status
+    lens: Select
+    props:
+      label: Filter by status
+      options: ["", proposed, accepted, rejected, superseded]
+      value: { $bindState: "/filters/decision_status" }
+
+  # ── Policy review (driver of policy-clause-review) ─────────────────────
+
+  - id: select-policy
+    lens: Select
+    props:
+      label: Review policy
+      options:
+        - policy-data-residency
+        - policy-oss
+        - policy-hiring-rubric
+        - policy-secrets
+        - policy-customer-data
+      value: { $bindState: "/selection/policy_id" }
+
+  - id: policy-clause-review
+    lens: ActionList
+    # Ego from the selected Policy out via hasClause to its PolicyClauses.
+    # When /selection/policy_id is empty, the executor drops the `id` filter
+    # and the ego matches all Policies → all clauses appear.
+    query:
+      fixture:
+        kind: ego
+        center:
+          type: Policy
+          where:
+            id: { $state: "/selection/policy_id" }
+        out: [hasClause]
+        in:  []
+        project:
+          - { var: neighbor.id,     as: id }
+          - { var: neighbor.title,  as: title }
+          - { var: neighbor.text,   as: body }
+          - { var: neighbor.status, as: status }   # status is what the buttons mutate
+          - { var: center.id,       as: policy_id }
+    props:
+      id_column: id
+      title_column: title
+      body_column: body
+      # Status badge reads from the row's `status` field (post-mutation truth).
+      # No more state-only approve/reject — each click is one atomic mutation
+      # against the source (FixtureSource here, omnigraph-server in prod).
+      status_field: status
+      meta_columns: [policy_id]
+      actions:
+        - label: Approve
+          variant: primary
+          mutation:
+            kind: set_field
+            target_type: PolicyClause
+            field: status
+            value: approved
+        - label: Reject
+          variant: danger
+          mutation:
+            kind: set_field
+            target_type: PolicyClause
+            field: status
+            value: rejected
+
+  # ── Tables ─────────────────────────────────────────────────────────────
+
+  - id: decisions-by-urgency
+    lens: Table
+    query:
+      fixture:
+        kind: nodes
+        where:
+          type: Decision
+          status: { $state: "/filters/decision_status" }
+        project: [id, title, status, urgency, decided_at]
+        order_by: { field: urgency, direction: asc }
+    props:
+      columns:
+        - { key: id,         label: ID }
+        - { key: title,      label: Title }
+        - { key: status,     label: Status }
+        - { key: urgency,    label: Urgency }
+        - { key: decided_at, label: Decided }
+
+  - id: open-issues
+    lens: Table
+    query:
+      fixture:
+        kind: nodes
+        where: { type: Issue, status: open }
+        project: [id, title, severity, area]
+        order_by: { field: severity, direction: asc }
+    props:
+      columns:
+        - { key: id,       label: ID }
+        - { key: title,    label: Title }
+        - { key: severity, label: Severity }
+        - { key: area,     label: Area }
+
+  # ── Paths ──────────────────────────────────────────────────────────────
+
+  - id: signal-to-owner
+    lens: Path
+    query:
+      fixture:
+        kind: path
+        steps:
+          - { var: s, type: Signal }
+          - { edge: triggers, var: d, type: Decision, direction: out }
+          - { edge: owns,     var: a, type: Actor,    direction: in }
+        project:
+          - { var: s.title, as: signal_title }
+          - { literal: triggers, as: triggers_label }
+          - { var: d.title, as: decision_title }
+          - { literal: owned by, as: owns_label }
+          - { var: a.name,  as: actor_name }
+    props:
+      steps:
+        - { from_column: signal_title,   predicate_column: triggers_label, to_column: decision_title }
+        - { from_column: decision_title, predicate_column: owns_label,     to_column: actor_name }
+
+  - id: evidence-trail
+    lens: Path
+    query:
+      fixture:
+        kind: path
+        steps:
+          - { var: r, type: Reference }
+          - { edge: substantiates, var: d, type: Decision }
+          - { edge: affects,       var: i, type: Issue }
+        project:
+          - { var: r.title, as: reference }
+          - { literal: substantiates, as: p1 }
+          - { var: d.title, as: decision }
+          - { literal: affects, as: p2 }
+          - { var: i.title, as: issue }
+    props:
+      steps:
+        - { from_column: reference, predicate_column: p1, to_column: decision }
+        - { from_column: decision,  predicate_column: p2, to_column: issue }
+
+  # ── Subgraphs (ego) ────────────────────────────────────────────────────
+
+  - id: decision-neighbors
+    lens: Subgraph
+    query:
+      fixture:
+        kind: ego
+        center:
+          type: Decision
+          where: { id: eu-data-residency }
+        out: [governed_by, affects, resolves, discussed_in, supersedes]
+        in:  [owns, triggers, substantiates, raises, participated]
+        project:
+          - { var: center.id,    as: id }
+          - { var: center.title, as: name }
+          - { var: edge_type,    as: predicate }
+          - { var: neighbor.id,  as: neighbor }
+    props:
+      center: { type: Decision, id_column: id, label_column: name }
+      depth: 1
+
+  - id: actor-portfolio
+    lens: Subgraph
+    query:
+      fixture:
+        kind: ego
+        center:
+          type: Actor
+          where: { id: priya }
+        out: [owns, owns_policy, authored, participated]
+        in:  []
+        project:
+          - { var: center.id,      as: id }
+          - { var: center.name,    as: name }
+          - { var: edge_type,      as: predicate }
+          - { var: neighbor.title, as: neighbor }
+    props:
+      center: { type: Actor, id_column: id, label_column: name }
+      depth: 1

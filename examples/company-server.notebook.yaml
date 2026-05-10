@@ -1,0 +1,98 @@
+version: 1
+title: Company context (live RustFS-backed omnigraph)
+server: http://127.0.0.1:8080
+
+# Server-mode demo. Same lens components, same action wiring as the fixture
+# notebook — but reads go to omnigraph-server (POST /read) and ActionList
+# clicks go to POST /change (one atomic Lance commit per click). Mutations
+# persist across server restarts.
+#
+# v0.7 scope: only `nodes` and `path` query kinds translate to .gq.
+# Per-step `where` filters land in v0.8, so this notebook shows ALL clauses
+# rather than narrowing by selected policy. The ActionList per-row buttons
+# still let the user approve/reject any individual clause.
+
+cells:
+
+  - id: policy-clause-review
+    lens: ActionList
+    query:
+      fixture:
+        kind: path
+        steps:
+          - { var: p, type: Policy }
+          - { edge: HasClause, var: c, type: PolicyClause }
+        project:
+          # Project `slug` (server's @key field) as `id` for the ActionList,
+          # which references rows by their `id_column`. The mutation handler
+          # passes the exposed id back to the server as `target_id`, where
+          # the translator emits `where slug = $target_id`.
+          - { var: c.slug,   as: id }
+          - { var: c.title,  as: title }
+          - { var: c.text,   as: body }
+          - { var: c.status, as: status }
+          - { var: p.slug,   as: policy_id }
+    props:
+      id_column: id
+      title_column: title
+      body_column: body
+      status_field: status
+      meta_columns: [policy_id]
+      actions:
+        - label: Approve
+          variant: primary
+          mutation:
+            kind: set_field
+            target_type: PolicyClause
+            field: status
+            value: approved
+        - label: Reject
+          variant: danger
+          mutation:
+            kind: set_field
+            target_type: PolicyClause
+            field: status
+            value: rejected
+
+  - id: decisions-by-urgency
+    lens: Table
+    # Inline filter — operates on this cell's data view, not its own screen.
+    # The Select binds /filters/decision_status; the where clause picks
+    # it up via $state and the executor pre-resolves before the .gq
+    # translator emits the parameterized match.
+    controls:
+      - lens: Select
+        props:
+          label: Status filter
+          options: ["", proposed, accepted, rejected, superseded]
+          value: { $bindState: "/filters/decision_status" }
+    query:
+      fixture:
+        kind: nodes
+        where:
+          type: Decision
+          status: { $state: "/filters/decision_status" }
+        project: [slug, title, status, urgency]
+        order_by: { field: urgency, direction: asc }
+    props:
+      columns:
+        - { key: slug,    label: ID }
+        - { key: title,   label: Title }
+        - { key: status,  label: Status }
+        - { key: urgency, label: Urgency }
+
+  - id: signal-to-decision
+    lens: Path
+    query:
+      fixture:
+        kind: path
+        steps:
+          - { var: s, type: Signal }
+          - { edge: Triggers, var: d, type: Decision }
+        project:
+          - { var: s.title, as: signal_title }
+          - { literal: triggers, as: triggers_label }
+          - { var: d.title, as: decision_title }
+    props:
+      steps:
+        - { from_column: signal_title, predicate_column: triggers_label, to_column: decision_title }

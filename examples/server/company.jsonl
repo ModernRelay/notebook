@@ -1,0 +1,198 @@
+{"type":"Actor","data":{"name":"Andrew Chen","role":"CEO","team":"exec","slug":"andrew"}}
+{"type":"Actor","data":{"name":"Priya Ramaswamy","role":"CTO","team":"exec","slug":"priya"}}
+{"type":"Actor","data":{"name":"Miguel Alvarez","role":"VP Engineering","team":"engineering","slug":"miguel"}}
+{"type":"Actor","data":{"name":"Sarah O'Connor","role":"VP Product","team":"product","slug":"sarah"}}
+{"type":"Actor","data":{"name":"James Whitfield","role":"VP Sales","team":"gtm","slug":"james"}}
+{"type":"Actor","data":{"name":"Elena Vasquez","role":"Head of Security","team":"security","slug":"elena"}}
+{"type":"Actor","data":{"name":"Ruben Holmberg","role":"Senior Engineer","team":"engineering","slug":"ruben"}}
+{"type":"Actor","data":{"name":"Taro Sasaki","role":"Staff Engineer","team":"engineering","slug":"taro"}}
+{"type":"Decision","data":{"title":"Adopt SOC2 Type II controls","status":"accepted","urgency":"high","decided_at":"2026-03-15","slug":"adopt-soc2"}}
+{"type":"Decision","data":{"title":"Open-source the core engine","status":"accepted","urgency":"high","decided_at":"2026-02-09","slug":"open-source-engine"}}
+{"type":"Decision","data":{"title":"Hire VP of Marketing","status":"proposed","urgency":"high","decided_at":null,"slug":"hire-vp-marketing"}}
+{"type":"Decision","data":{"title":"Launch private AI offering","status":"proposed","urgency":"high","decided_at":"2026-04-22","slug":"private-ai-offering"}}
+{"type":"Decision","data":{"title":"Provide EU data residency","status":"accepted","urgency":"high","decided_at":"2026-04-02","slug":"eu-data-residency"}}
+{"type":"Decision","data":{"title":"Add zero-retention mode for enterprise","status":"accepted","urgency":"medium","decided_at":"2026-03-28","slug":"zero-retention-mode"}}
+{"type":"Decision","data":{"title":"Migrate to Lance 4.x","status":"superseded","urgency":"medium","decided_at":"2026-01-12","slug":"lance-4-migration"}}
+{"type":"Decision","data":{"title":"Plan Lance 5.x adoption","status":"proposed","urgency":"low","decided_at":null,"slug":"lance-5-roadmap"}}
+{"type":"Decision","data":{"title":"Revamp Q3 pricing tiers","status":"proposed","urgency":"high","decided_at":null,"slug":"q3-pricing-revamp"}}
+{"type":"Issue","data":{"title":"FTS recall drops after compaction","severity":"high","status":"open","area":"storage","slug":"fts-recall-degradation"}}
+{"type":"Issue","data":{"title":"Cold-start latency exceeds 5s","severity":"medium","status":"open","area":"infrastructure","slug":"cold-start-latency"}}
+{"type":"Issue","data":{"title":"Branch merge produces stale indexes","severity":"high","status":"open","area":"storage","slug":"branch-merge-conflicts"}}
+{"type":"Issue","data":{"title":"Enterprise deal stalled on residency","severity":"high","status":"mitigated","area":"gtm","slug":"enterprise-deal-stalled"}}
+{"type":"Issue","data":{"title":"VP Marketing pipeline thin","severity":"medium","status":"open","area":"hiring","slug":"hiring-pipeline-thin"}}
+{"type":"Issue","data":{"title":"Competitor undercut on entry tier","severity":"medium","status":"open","area":"gtm","slug":"competitor-pricing"}}
+{"type":"Issue","data":{"title":"Snapshot storage bloat in long-lived branches","severity":"low","status":"open","area":"storage","slug":"snapshot-bloat"}}
+{"type":"Issue","data":{"title":"Cedar policy drifts between envs","severity":"medium","status":"open","area":"security","slug":"policy-drift"}}
+{"type":"Policy","data":{"title":"Data Residency","version":"v2","applies_to":"all-customers","slug":"policy-data-residency"}}
+{"type":"Policy","data":{"title":"Open-Source Contributions","version":"v1","applies_to":"engineering","slug":"policy-oss"}}
+{"type":"Policy","data":{"title":"Engineering Hiring Rubric","version":"v3","applies_to":"engineering","slug":"policy-hiring-rubric"}}
+{"type":"Policy","data":{"title":"Secrets Handling","version":"v2","applies_to":"all-staff","slug":"policy-secrets"}}
+{"type":"Policy","data":{"title":"Customer Data Retention","version":"v1","applies_to":"all-customers","slug":"policy-customer-data"}}
+{"type":"Reference","data":{"title":"RFC-001: Engine Architecture","kind":"rfc","status":"accepted","url":"internal://rfcs/001","slug":"rfc-001-engine-arch"}}
+{"type":"Reference","data":{"title":"RFC-014: Manifest Recovery (MR-847)","kind":"rfc","status":"accepted","url":"internal://rfcs/014","slug":"rfc-014-mr847"}}
+{"type":"Reference","data":{"title":"RFC-022: RRF Tuning","kind":"rfc","status":"draft","url":"internal://rfcs/022","slug":"rfc-022-rrf-tuning"}}
+{"type":"Reference","data":{"title":"Cedar Policy Spec v3","kind":"spec","status":"accepted","url":"internal://specs/cedar-v3","slug":"spec-cedar-policy"}}
+{"type":"Reference","data":{"title":"RFC-031: Pricing Tier Design","kind":"rfc","status":"draft","url":"internal://rfcs/031","slug":"rfc-031-pricing"}}
+{"type":"Reference","data":{"title":"Decision Record Template","kind":"template","status":"accepted","url":"internal://templates/dr","slug":"tpl-decision-record"}}
+{"type":"Source","data":{"title":"Gartner Q1 2026 Magic Quadrant","kind":"analyst_report","observed_at":"2026-02-01","url":"https://example.com/gartner-q1","slug":"src-gartner-q1"}}
+{"type":"Source","data":{"title":"Customer interview: ACME Corp","kind":"customer_interview","observed_at":"2026-03-04","url":"internal://interviews/acme","slug":"src-customer-acme"}}
+{"type":"Source","data":{"title":"TechCrunch: Competitor X funding","kind":"news","observed_at":"2026-03-19","url":"https://example.com/news/comp-x","slug":"src-news-competitor"}}
+{"type":"Source","data":{"title":"Customer interview: Globex Mfg","kind":"customer_interview","observed_at":"2026-03-22","url":"internal://interviews/globex","slug":"src-customer-globex"}}
+{"type":"Source","data":{"title":"Forrester Wave: Knowledge Graphs","kind":"analyst_report","observed_at":"2026-04-09","url":"https://example.com/forrester","slug":"src-forrester"}}
+{"type":"Source","data":{"title":"Blog: EU AI regulation timeline","kind":"blog","observed_at":"2026-04-14","url":"https://example.com/eu-blog","slug":"src-blog-eu-regulator"}}
+{"type":"Signal","data":{"title":"Competitor launches private AI platform for regulated industries","category":"competitor","strength":"strong","observed_at":"2026-03-19","slug":"sig-private-ai-platform"}}
+{"type":"Signal","data":{"title":"Enterprise prospects demand EU residency","category":"customer","strength":"strong","observed_at":"2026-03-22","slug":"sig-enterprise-data-residency"}}
+{"type":"Signal","data":{"title":"EU AI Act enforcement begins Q3","category":"regulatory","strength":"strong","observed_at":"2026-04-14","slug":"sig-eu-ai-act"}}
+{"type":"Signal","data":{"title":"Lance 5.x release imminent; 4.x EOL plan","category":"technology","strength":"moderate","observed_at":"2026-04-21","slug":"sig-lance-5-release"}}
+{"type":"Signal","data":{"title":"Customer pricing feedback at user conf","category":"customer","strength":"moderate","observed_at":"2026-03-04","slug":"sig-customer-pricing"}}
+{"type":"Signal","data":{"title":"Competitor X undercuts entry-tier pricing 30%","category":"competitor","strength":"strong","observed_at":"2026-04-09","slug":"sig-competitor-undercut"}}
+{"type":"Signal","data":{"title":"SOC2 cited by 3 enterprise prospects as blocker","category":"customer","strength":"strong","observed_at":"2026-02-10","slug":"sig-soc2-blocker"}}
+{"type":"Signal","data":{"title":"HNSW recall improvements in lance-vector","category":"technology","strength":"weak","observed_at":"2026-04-21","slug":"sig-hnsw-improvements"}}
+{"type":"PolicyClause","data":{"title":"Region locality","text":"All customer data resides in the customer's selected region; no implicit cross-region replication.","status":"draft","slug":"pdr-c1"}}
+{"type":"PolicyClause","data":{"title":"Cross-region transfers","text":"Cross-region data transfers require legal review and documented customer consent.","status":"draft","slug":"pdr-c2"}}
+{"type":"PolicyClause","data":{"title":"EU territoriality","text":"EU customer data and derived artifacts never leave EU territory under any circumstance.","status":"draft","slug":"pdr-c3"}}
+{"type":"PolicyClause","data":{"title":"Region tags in audit logs","text":"All audit log entries include the region tag of the originating data and the actor's region.","status":"draft","slug":"pdr-c4"}}
+{"type":"PolicyClause","data":{"title":"Outbound contributions","text":"All OSS contributions are reviewed by the OSS committee before being made on company time.","status":"draft","slug":"poss-c1"}}
+{"type":"PolicyClause","data":{"title":"20% time","text":"Engineers may contribute to upstream dependencies during their 20% time without prior approval.","status":"draft","slug":"poss-c2"}}
+{"type":"PolicyClause","data":{"title":"Default outbound license","text":"Apache-2.0 is the default outbound license; deviations require legal sign-off.","status":"draft","slug":"poss-c3"}}
+{"type":"PolicyClause","data":{"title":"Two technical interviewers","text":"Each candidate has at least two independent technical interviewers from different teams.","status":"draft","slug":"phr-c1"}}
+{"type":"PolicyClause","data":{"title":"Structured rubric","text":"Interviewers score against the structured rubric (≥5 dimensions) before debrief.","status":"draft","slug":"phr-c2"}}
+{"type":"PolicyClause","data":{"title":"48-hour decision SLA","text":"Hire/no-hire decisions are documented within 48 hours of the final interview.","status":"draft","slug":"phr-c3"}}
+{"type":"PolicyClause","data":{"title":"Calibration cadence","text":"A hiring calibration session runs weekly while any req is open on the team.","status":"draft","slug":"phr-c4"}}
+{"type":"PolicyClause","data":{"title":"No secrets in source","text":"Secrets must not appear in code, environment files, or tickets.","status":"draft","slug":"psec-c1"}}
+{"type":"PolicyClause","data":{"title":"90-day rotation","text":"All long-lived secrets are rotated at least every 90 days.","status":"draft","slug":"psec-c2"}}
+{"type":"PolicyClause","data":{"title":"Quarterly audit","text":"Secret inventory is audited quarterly by the security team with a report posted to the team channel.","status":"draft","slug":"psec-c3"}}
+{"type":"PolicyClause","data":{"title":"Compromise SLA","text":"Compromised secrets are rotated within 1 hour of confirmed compromise.","status":"draft","slug":"psec-c4"}}
+{"type":"PolicyClause","data":{"title":"7-year retention","text":"Customer data is retained for 7 years post-contract unless a deletion request is honored.","status":"draft","slug":"pcd-c1"}}
+{"type":"PolicyClause","data":{"title":"Right to be forgotten","text":"Right-to-be-forgotten requests are honored within 30 days of receipt.","status":"draft","slug":"pcd-c2"}}
+{"type":"PolicyClause","data":{"title":"Encryption baseline","text":"Customer data is encrypted at rest (AES-256+) and in transit (TLS 1.3+).","status":"draft","slug":"pcd-c3"}}
+{"type":"PolicyClause","data":{"title":"Quarterly inventory","text":"Quarterly data inventory review with a written attestation by the data steward.","status":"draft","slug":"pcd-c4"}}
+{"edge":"Owns","from":"andrew","to":"hire-vp-marketing"}
+{"edge":"Owns","from":"andrew","to":"open-source-engine"}
+{"edge":"Owns","from":"priya","to":"lance-4-migration"}
+{"edge":"Owns","from":"priya","to":"lance-5-roadmap"}
+{"edge":"Owns","from":"elena","to":"adopt-soc2"}
+{"edge":"Owns","from":"elena","to":"eu-data-residency"}
+{"edge":"Owns","from":"sarah","to":"q3-pricing-revamp"}
+{"edge":"Owns","from":"miguel","to":"zero-retention-mode"}
+{"edge":"Owns","from":"james","to":"private-ai-offering"}
+{"edge":"OwnsPolicy","from":"elena","to":"policy-data-residency"}
+{"edge":"OwnsPolicy","from":"elena","to":"policy-secrets"}
+{"edge":"OwnsPolicy","from":"andrew","to":"policy-oss"}
+{"edge":"OwnsPolicy","from":"priya","to":"policy-hiring-rubric"}
+{"edge":"OwnsPolicy","from":"elena","to":"policy-customer-data"}
+{"edge":"Authored","from":"priya","to":"rfc-001-engine-arch"}
+{"edge":"Authored","from":"priya","to":"rfc-014-mr847"}
+{"edge":"Authored","from":"ruben","to":"rfc-022-rrf-tuning"}
+{"edge":"Authored","from":"elena","to":"spec-cedar-policy"}
+{"edge":"Authored","from":"sarah","to":"rfc-031-pricing"}
+{"edge":"Authored","from":"andrew","to":"tpl-decision-record"}
+{"edge":"Authored","from":"taro","to":"rfc-001-engine-arch"}
+{"edge":"Authored","from":"taro","to":"rfc-014-mr847"}
+{"edge":"Participated","from":"priya","to":"adopt-soc2"}
+{"edge":"Participated","from":"elena","to":"open-source-engine"}
+{"edge":"Participated","from":"miguel","to":"open-source-engine"}
+{"edge":"Participated","from":"james","to":"hire-vp-marketing"}
+{"edge":"Participated","from":"sarah","to":"hire-vp-marketing"}
+{"edge":"Participated","from":"andrew","to":"private-ai-offering"}
+{"edge":"Participated","from":"priya","to":"private-ai-offering"}
+{"edge":"Participated","from":"elena","to":"private-ai-offering"}
+{"edge":"Participated","from":"andrew","to":"eu-data-residency"}
+{"edge":"Participated","from":"james","to":"eu-data-residency"}
+{"edge":"Participated","from":"james","to":"zero-retention-mode"}
+{"edge":"Participated","from":"elena","to":"zero-retention-mode"}
+{"edge":"Participated","from":"ruben","to":"lance-4-migration"}
+{"edge":"Participated","from":"taro","to":"lance-4-migration"}
+{"edge":"Participated","from":"ruben","to":"lance-5-roadmap"}
+{"edge":"Participated","from":"taro","to":"lance-5-roadmap"}
+{"edge":"Participated","from":"james","to":"q3-pricing-revamp"}
+{"edge":"Participated","from":"andrew","to":"q3-pricing-revamp"}
+{"edge":"Triggers","from":"sig-private-ai-platform","to":"private-ai-offering"}
+{"edge":"Triggers","from":"sig-enterprise-data-residency","to":"eu-data-residency"}
+{"edge":"Triggers","from":"sig-eu-ai-act","to":"eu-data-residency"}
+{"edge":"Triggers","from":"sig-lance-5-release","to":"lance-5-roadmap"}
+{"edge":"Triggers","from":"sig-customer-pricing","to":"q3-pricing-revamp"}
+{"edge":"Triggers","from":"sig-competitor-undercut","to":"q3-pricing-revamp"}
+{"edge":"Triggers","from":"sig-soc2-blocker","to":"adopt-soc2"}
+{"edge":"Triggers","from":"sig-hnsw-improvements","to":"lance-5-roadmap"}
+{"edge":"Triggers","from":"sig-soc2-blocker","to":"eu-data-residency"}
+{"edge":"Substantiates","from":"rfc-001-engine-arch","to":"open-source-engine"}
+{"edge":"Substantiates","from":"rfc-014-mr847","to":"lance-4-migration"}
+{"edge":"Substantiates","from":"rfc-014-mr847","to":"lance-5-roadmap"}
+{"edge":"Substantiates","from":"rfc-022-rrf-tuning","to":"lance-5-roadmap"}
+{"edge":"Substantiates","from":"spec-cedar-policy","to":"adopt-soc2"}
+{"edge":"Substantiates","from":"spec-cedar-policy","to":"eu-data-residency"}
+{"edge":"Substantiates","from":"rfc-031-pricing","to":"q3-pricing-revamp"}
+{"edge":"Substantiates","from":"tpl-decision-record","to":"adopt-soc2"}
+{"edge":"Substantiates","from":"tpl-decision-record","to":"eu-data-residency"}
+{"edge":"Substantiates","from":"tpl-decision-record","to":"open-source-engine"}
+{"edge":"ObservedVia","from":"sig-private-ai-platform","to":"src-news-competitor"}
+{"edge":"ObservedVia","from":"sig-enterprise-data-residency","to":"src-customer-acme"}
+{"edge":"ObservedVia","from":"sig-enterprise-data-residency","to":"src-customer-globex"}
+{"edge":"ObservedVia","from":"sig-eu-ai-act","to":"src-blog-eu-regulator"}
+{"edge":"ObservedVia","from":"sig-lance-5-release","to":"src-news-competitor"}
+{"edge":"ObservedVia","from":"sig-customer-pricing","to":"src-customer-acme"}
+{"edge":"ObservedVia","from":"sig-competitor-undercut","to":"src-gartner-q1"}
+{"edge":"ObservedVia","from":"sig-soc2-blocker","to":"src-customer-globex"}
+{"edge":"ObservedVia","from":"sig-hnsw-improvements","to":"src-news-competitor"}
+{"edge":"Raises","from":"fts-recall-degradation","to":"lance-5-roadmap"}
+{"edge":"Raises","from":"cold-start-latency","to":"lance-5-roadmap"}
+{"edge":"Raises","from":"branch-merge-conflicts","to":"lance-5-roadmap"}
+{"edge":"Raises","from":"enterprise-deal-stalled","to":"eu-data-residency"}
+{"edge":"Raises","from":"hiring-pipeline-thin","to":"hire-vp-marketing"}
+{"edge":"Raises","from":"competitor-pricing","to":"q3-pricing-revamp"}
+{"edge":"Raises","from":"policy-drift","to":"adopt-soc2"}
+{"edge":"Resolves","from":"adopt-soc2","to":"policy-drift"}
+{"edge":"Resolves","from":"eu-data-residency","to":"enterprise-deal-stalled"}
+{"edge":"Resolves","from":"lance-5-roadmap","to":"cold-start-latency"}
+{"edge":"Resolves","from":"lance-5-roadmap","to":"branch-merge-conflicts"}
+{"edge":"Resolves","from":"q3-pricing-revamp","to":"competitor-pricing"}
+{"edge":"Affects","from":"adopt-soc2","to":"snapshot-bloat"}
+{"edge":"Affects","from":"open-source-engine","to":"snapshot-bloat"}
+{"edge":"Affects","from":"private-ai-offering","to":"cold-start-latency"}
+{"edge":"Affects","from":"private-ai-offering","to":"snapshot-bloat"}
+{"edge":"Affects","from":"zero-retention-mode","to":"policy-drift"}
+{"edge":"Affects","from":"lance-4-migration","to":"fts-recall-degradation"}
+{"edge":"Affects","from":"lance-5-roadmap","to":"fts-recall-degradation"}
+{"edge":"Affects","from":"eu-data-residency","to":"snapshot-bloat"}
+{"edge":"Affects","from":"q3-pricing-revamp","to":"hiring-pipeline-thin"}
+{"edge":"GovernedBy","from":"adopt-soc2","to":"policy-secrets"}
+{"edge":"GovernedBy","from":"adopt-soc2","to":"policy-customer-data"}
+{"edge":"GovernedBy","from":"eu-data-residency","to":"policy-data-residency"}
+{"edge":"GovernedBy","from":"eu-data-residency","to":"policy-customer-data"}
+{"edge":"GovernedBy","from":"private-ai-offering","to":"policy-data-residency"}
+{"edge":"GovernedBy","from":"zero-retention-mode","to":"policy-customer-data"}
+{"edge":"GovernedBy","from":"open-source-engine","to":"policy-oss"}
+{"edge":"GovernedBy","from":"hire-vp-marketing","to":"policy-hiring-rubric"}
+{"edge":"Supersedes","from":"lance-5-roadmap","to":"lance-4-migration"}
+{"edge":"Cites","from":"rfc-014-mr847","to":"rfc-001-engine-arch"}
+{"edge":"Cites","from":"rfc-022-rrf-tuning","to":"rfc-001-engine-arch"}
+{"edge":"Cites","from":"rfc-031-pricing","to":"tpl-decision-record"}
+{"edge":"Cites","from":"rfc-022-rrf-tuning","to":"rfc-014-mr847"}
+{"edge":"Cites","from":"spec-cedar-policy","to":"rfc-001-engine-arch"}
+{"edge":"Cites","from":"tpl-decision-record","to":"rfc-001-engine-arch"}
+{"edge":"Cites","from":"rfc-031-pricing","to":"rfc-001-engine-arch"}
+{"edge":"DiscussedIn","from":"private-ai-offering","to":"src-customer-acme"}
+{"edge":"DiscussedIn","from":"eu-data-residency","to":"src-customer-globex"}
+{"edge":"DiscussedIn","from":"q3-pricing-revamp","to":"src-customer-acme"}
+{"edge":"DiscussedIn","from":"adopt-soc2","to":"src-forrester"}
+{"edge":"DiscussedIn","from":"open-source-engine","to":"src-news-competitor"}
+{"edge":"HasClause","from":"policy-data-residency","to":"pdr-c1"}
+{"edge":"HasClause","from":"policy-data-residency","to":"pdr-c2"}
+{"edge":"HasClause","from":"policy-data-residency","to":"pdr-c3"}
+{"edge":"HasClause","from":"policy-data-residency","to":"pdr-c4"}
+{"edge":"HasClause","from":"policy-oss","to":"poss-c1"}
+{"edge":"HasClause","from":"policy-oss","to":"poss-c2"}
+{"edge":"HasClause","from":"policy-oss","to":"poss-c3"}
+{"edge":"HasClause","from":"policy-hiring-rubric","to":"phr-c1"}
+{"edge":"HasClause","from":"policy-hiring-rubric","to":"phr-c2"}
+{"edge":"HasClause","from":"policy-hiring-rubric","to":"phr-c3"}
+{"edge":"HasClause","from":"policy-hiring-rubric","to":"phr-c4"}
+{"edge":"HasClause","from":"policy-secrets","to":"psec-c1"}
+{"edge":"HasClause","from":"policy-secrets","to":"psec-c2"}
+{"edge":"HasClause","from":"policy-secrets","to":"psec-c3"}
+{"edge":"HasClause","from":"policy-secrets","to":"psec-c4"}
+{"edge":"HasClause","from":"policy-customer-data","to":"pcd-c1"}
+{"edge":"HasClause","from":"policy-customer-data","to":"pcd-c2"}
+{"edge":"HasClause","from":"policy-customer-data","to":"pcd-c3"}
+{"edge":"HasClause","from":"policy-customer-data","to":"pcd-c4"}

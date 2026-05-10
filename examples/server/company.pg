@@ -1,0 +1,89 @@
+// Company-context schema — server-mode equivalent of
+// examples/fixtures/company-context.json.
+// Init / load via scripts/server-demo.sh.
+
+// ── Nodes ────────────────────────────────────────────
+
+node Actor {
+    slug: String @key
+    name: String @index
+    role: String?
+    team: String?
+}
+
+node Decision {
+    slug: String @key
+    title: String @index
+    status: enum(proposed, accepted, rejected, superseded)
+    urgency: enum(low, medium, high, critical)
+    decided_at: Date?
+}
+
+node Issue {
+    slug: String @key
+    title: String @index
+    severity: enum(low, medium, high)
+    status: enum(open, mitigated, closed)
+    area: String?
+}
+
+node Policy {
+    slug: String @key
+    title: String @index
+    version: String?
+    applies_to: String?
+}
+
+node PolicyClause {
+    slug: String @key
+    title: String @index
+    text: String?
+    // Mutated by the UI's ActionList approve/reject buttons. Defaults to
+    // "draft" on load; the demo flips it to approved/rejected via
+    // POST /change.
+    status: enum(draft, approved, rejected)
+}
+
+node Reference {
+    slug: String @key
+    title: String @index
+    kind: enum(rfc, spec, template, runbook)
+    status: enum(accepted, draft)
+    url: String?
+}
+
+node Source {
+    slug: String @key
+    title: String @index
+    kind: enum(analyst_report, customer_interview, news, blog)
+    observed_at: Date?
+    url: String?
+}
+
+node Signal {
+    slug: String @key
+    title: String @index
+    category: enum(competitor, customer, regulatory, technology)
+    strength: enum(weak, moderate, strong)
+    observed_at: Date?
+}
+
+// ── Edges ────────────────────────────────────────────
+// PascalCase as required by the .pg grammar; queried as camelCase
+// (e.g. `$p hasClause $c`) per omnigraph convention.
+
+edge Owns:          Actor      -> Decision
+edge OwnsPolicy:    Actor      -> Policy
+edge Authored:      Actor      -> Reference
+edge Participated:  Actor      -> Decision
+edge Triggers:      Signal     -> Decision
+edge Substantiates: Reference  -> Decision
+edge ObservedVia:   Signal     -> Source
+edge Raises:        Issue      -> Decision
+edge Resolves:      Decision   -> Issue
+edge Affects:       Decision   -> Issue
+edge GovernedBy:    Decision   -> Policy
+edge Supersedes:    Decision   -> Decision { @unique(src, dst) }
+edge Cites:         Reference  -> Reference
+edge DiscussedIn:   Decision   -> Source
+edge HasClause:     Policy     -> PolicyClause

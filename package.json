@@ -1,0 +1,21 @@
+{
+  "name": "omnigraph-ui",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Notebook UI for OmniGraph. Typed lens primitives over a fixture or live engine, rendered to terminal and web from one json-render catalog.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "tui": "node packages/tui/bin/omnigraph-tui.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3"
+  }
+}
