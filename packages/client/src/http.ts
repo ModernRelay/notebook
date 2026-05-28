@@ -65,7 +65,13 @@ export class Client {
   constructor(opts: ClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
     this.token = opts.token ?? process.env.OMNIGRAPH_TOKEN;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // Bind to globalThis: in browsers, calling `fetch` with `this`
+    // pointing at a non-Window receiver throws "Illegal invocation".
+    // Storing the global as a class member makes `this.fetchImpl(...)`
+    // call it as a method on the Client instance unless we bind it
+    // explicitly here. Node 18+'s fetch is permissive and worked
+    // without this, which is why the TUI never tripped.
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
   }
 
   read(body: ReadInput): Promise<ReadOutput> {

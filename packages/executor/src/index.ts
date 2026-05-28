@@ -265,18 +265,31 @@ function resolveWhere(
   return out;
 }
 
-/** Resolve a single value: `{ $state: "/p" }` → state lookup; else passthrough. */
+/**
+ * Resolve a single value:
+ *   - `{ $state: "/p" }`                → state lookup
+ *   - `{ $state: "/p", default: "x" }`  → state lookup, falling back to
+ *     `"x"` when state at `/p` is undefined / null / empty-string
+ *
+ * The `default` form is the way notebooks seed parameterized .gq queries
+ * with a sensible initial value (e.g. an actor slug for a `decisions_by_actor`
+ * dashboard) so the cell isn't empty before the user touches the Select.
+ * Everything else passes through unchanged.
+ */
 function resolveExpr(value: unknown, state: Record<string, unknown>): unknown {
   if (
     value &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
     "$state" in (value as object)
   ) {
-    const ptr = (value as { $state: unknown }).$state;
-    if (typeof ptr !== "string") return undefined;
-    return resolveStatePointer(state, ptr);
+    const obj = value as { $state: unknown; default?: unknown };
+    if (typeof obj.$state !== "string") return undefined;
+    const resolved = resolveStatePointer(state, obj.$state);
+    if (resolved === undefined || resolved === null || resolved === "") {
+      return obj.default;
+    }
+    return resolved;
   }
   return value;
 }

@@ -146,9 +146,6 @@ importers:
       '@omnigraph/executor':
         specifier: workspace:*
         version: link:../executor
-      '@omnigraph/fixture':
-        specifier: workspace:*
-        version: link:../fixture
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec

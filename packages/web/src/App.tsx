@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { parseNotebook, type Notebook } from "@omnigraph/notebook-spec";
-import { parseFixture, FixtureSource } from "@omnigraph/fixture";
+import { parseNotebook } from "@omnigraph/notebook-spec";
 import { Client, ServerSource } from "@omnigraph/client";
 import {
   runNotebook,
@@ -12,36 +17,30 @@ import {
   type Source,
 } from "@omnigraph/executor";
 
-// Both notebook YAML files are inlined at build time. The mode picker
-// (URL ?mode=server) chooses which one drives the App, then the Source
-// instantiation routes reads/mutations through fixture or HTTP.
-import fixtureNotebookYaml from "../../../examples/company.notebook.yaml?raw";
-import serverNotebookYaml from "../../../examples/company-server.notebook.yaml?raw";
-import fixtureJson from "../../../examples/fixtures/company-context.json";
+// Notebook is bundled at build-time. For now we point at the sibling
+// omnigraph-demo repo (BioHelix scenario, Hermes' review branch); a
+// future iteration will load the notebook from the server itself so
+// switching dashboards doesn't require a rebuild.
+import notebookYaml from "../../../../omnigraph-demo/dashboard.notebook.yaml?raw";
 
 import { webRegistry } from "./registry.js";
-
-type Mode = "fixture" | "server";
+import { keyOf, optimisticStore } from "./optimistic-store.js";
+import {
+  classifyMutationError,
+  type ClassifiedError,
+} from "./error-classifier.js";
 
 interface AppConfig {
-  mode: Mode;
-  notebook: Notebook;
+  notebook: ReturnType<typeof parseNotebook>;
   source: Source;
-  /** Display label for the header — fixture path or server URL. */
+  /** Display label for the header — the live server URL. */
   label: string;
-}
-
-function readMode(): Mode {
-  const url = new URL(window.location.href);
-  return url.searchParams.get("mode") === "server" ? "server" : "fixture";
 }
 
 function readToken(): string | undefined {
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get("token");
   if (fromUrl) {
-    // Tokens land in localStorage so a refresh keeps the session alive
-    // without re-typing in the URL bar.
     window.localStorage.setItem("omnigraph_token", fromUrl);
     return fromUrl;
   }
@@ -49,33 +48,20 @@ function readToken(): string | undefined {
 }
 
 function buildConfig(): AppConfig {
-  const mode = readMode();
-  if (mode === "server") {
-    const notebook = parseNotebook(serverNotebookYaml);
-    if (!notebook.server) {
-      throw new Error(
-        "company-server.notebook.yaml is missing top-level `server:` URL",
-      );
-    }
-    const client = new Client({ baseUrl: notebook.server, token: readToken() });
-    const source = new ServerSource(client);
-    return { mode, notebook, source, label: `server: ${notebook.server}` };
+  const notebook = parseNotebook(notebookYaml);
+  if (!notebook.server) {
+    throw new Error(
+      "Notebook is missing top-level `server:` URL — server mode requires it.",
+    );
   }
-  const notebook = parseNotebook(fixtureNotebookYaml);
-  const source = new FixtureSource(
-    parseFixture(fixtureJson, "company-context.json"),
-  );
-  return {
-    mode,
-    notebook,
-    source,
-    label: `fixture: ${notebook.fixture ?? "company-context.json"}`,
-  };
+  const client = new Client({ baseUrl: notebook.server, token: readToken() });
+  const source = new ServerSource(client);
+  return { notebook, source, label: notebook.server };
 }
 
 type Status =
   | { kind: "loading" }
-  | { kind: "ready"; execution: NotebookExecution }
+  | { kind: "ready"; execution: NotebookExecution; runEpoch: number }
   | { kind: "fatal"; message: string };
 
 export function App(): React.ReactElement {
@@ -86,7 +72,15 @@ export function App(): React.ReactElement {
   });
   const [status, setStatus] = useState<Status>({ kind: "loading" });
   const [stateModel, setStateModel] = useState<Record<string, unknown>>({});
-  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<ClassifiedError | null>(
+    null,
+  );
+
+  // Mutation epoch — each /change call we kick off bumps this so the
+  // executor re-runs against the new manifest version. Patches in the
+  // optimistic-store remember which epoch they were issued at so they
+  // can be reconciled once the corresponding executor run completes.
+  const epochRef = useRef(0);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
@@ -101,25 +95,51 @@ export function App(): React.ReactElement {
     [],
   );
 
-  // mirror of TUI: handlers must NOT throw — json-render's executeAction
-  // re-raises, and an unhandled rejection in a click breaks every other
-  // interaction. Catch + render inline + bump epoch on success.
   const handlers = useMemo(
     () => ({
       mutate: async (params: Record<string, unknown>) => {
+        const target_type = String(params.target_type ?? "");
+        const target_id = String(params.target_id ?? "");
+        const field = String(params.field ?? "");
+        const value = params.value;
+        const key =
+          target_type && target_id && field
+            ? keyOf({ target_type, target_id, field })
+            : null;
+
+        // Optimistic patch goes in BEFORE the network call — the lens
+        // re-renders the next frame with the user's intended value.
+        const clickedAtEpoch = epochRef.current;
+        if (key) {
+          optimisticStore.set({
+            target_type,
+            target_id,
+            field,
+            value,
+            clickedAtEpoch,
+          });
+        }
+
         try {
-          const src = config.source;
-          if (!src.mutate) {
-            throw new Error(
-              "current source does not support mutations (fixture without mutate?)",
-            );
+          if (!config.source.mutate) {
+            throw new Error("ServerSource does not support mutations");
           }
-          await src.mutate(params as Parameters<typeof src.mutate>[0]);
+          await config.source.mutate(
+            params as Parameters<NonNullable<Source["mutate"]>>[0],
+          );
           setMutationError(null);
-          setStateModel((prev) => ({ ...prev, __mutation_epoch__: Date.now() }));
+          if (key) optimisticStore.markSaved(key);
+          // Bump epoch → useEffect re-runs runNotebook → fresh data
+          // overrides the patch on the NEXT successful run.
+          epochRef.current = Date.now();
+          setStateModel((prev) => ({
+            ...prev,
+            __mutation_epoch__: epochRef.current,
+          }));
         } catch (err) {
+          if (key) optimisticStore.clear(key);
           const message = err instanceof Error ? err.message : String(err);
-          setMutationError(condenseMutationError(message));
+          setMutationError(classifyMutationError(message));
         }
       },
     }),
@@ -128,15 +148,20 @@ export function App(): React.ReactElement {
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = epochRef.current;
     runNotebook(config.notebook, config.source, { state: stateModel })
       .then((execution) => {
-        if (!cancelled) setStatus({ kind: "ready", execution });
+        if (cancelled) return;
+        setStatus({ kind: "ready", execution, runEpoch: startedAt });
+        // Fresh data has landed; any patch issued before this run is
+        // now redundant (server value either matches the patch — UI is
+        // unchanged — or diverges, in which case server wins).
+        optimisticStore.reconcile(startedAt + 1);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : String(err);
-          setStatus({ kind: "fatal", message });
-        }
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setStatus({ kind: "fatal", message });
       });
     return () => {
       cancelled = true;
@@ -163,19 +188,26 @@ export function App(): React.ReactElement {
               {config.notebook.cells.length === 1 ? "" : "s"}
             </p>
           </div>
-          <ModeBadge mode={config.mode} />
+          <span className="rounded-full bg-green-900/60 px-3 py-1 font-mono text-xs uppercase tracking-wide text-green-300">
+            live
+          </span>
         </header>
 
         {status.kind === "loading" && (
-          <p className="text-zinc-500">Running notebook…</p>
+          <LoadingSkeleton
+            cellTitles={config.notebook.cells.map((c) => c.id)}
+          />
         )}
         {status.kind === "fatal" && (
-          <p className="rounded-md bg-red-900/40 p-4 text-red-200">
-            fatal: {status.message}
-          </p>
+          <div className="rounded-md border border-red-800 bg-red-950/40 p-4">
+            <p className="font-mono uppercase tracking-wide text-red-300">
+              Failed to load notebook
+            </p>
+            <p className="mt-1 text-red-200">{status.message}</p>
+          </div>
         )}
         {status.kind === "ready" && (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {status.execution.cells.map((cell) => (
               <CellCard key={cell.cell.id} cell={cell} />
             ))}
@@ -183,42 +215,19 @@ export function App(): React.ReactElement {
         )}
 
         {mutationError !== null && (
-          <aside className="mt-6 rounded-md border border-red-800 bg-red-950/40 p-4 text-sm">
-            <p className="mb-1 font-mono uppercase tracking-wide text-red-300">
-              mutation error
-            </p>
-            <p className="font-mono text-red-200">{mutationError}</p>
-          </aside>
+          <ErrorPanel error={mutationError} onDismiss={() => setMutationError(null)} />
         )}
-
-        <ApprovalsBadge state={stateModel} />
       </main>
     </JSONUIProvider>
   );
 }
 
-function ModeBadge({ mode }: { mode: Mode }): React.ReactElement {
-  // Single switch surface: the badge links to the OTHER mode so the user
-  // can flip without typing query params manually.
-  const target = mode === "server" ? "" : "?mode=server";
-  return (
-    <a
-      href={target}
-      className={
-        "rounded-full px-3 py-1 text-xs font-mono uppercase tracking-wide " +
-        (mode === "server"
-          ? "bg-green-900/60 text-green-300 hover:bg-green-900"
-          : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700")
-      }
-      title={
-        mode === "server"
-          ? "server-backed (live omnigraph). Click for fixture mode."
-          : "fixture-backed (in-memory). Click for server mode."
-      }
-    >
-      {mode === "server" ? "server" : "fixture"}
-    </a>
-  );
+function humanizeCellId(id: string): string {
+  // recent-decisions → Recent decisions. Notebook cell ids are slugs;
+  // the dashboard reads them as human titles. Lower-cased second word
+  // on purpose so the title doesn't shout ("Recent Decisions").
+  const spaced = id.replace(/[-_]+/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
 function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
@@ -229,6 +238,7 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
 
   return (
     <section
+      id={cell.cell.id}
       className={
         "rounded-lg border p-5 " +
         (isControl
@@ -236,18 +246,15 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
           : "border-zinc-800 bg-zinc-900/40")
       }
     >
-      <header className="mb-3 flex items-baseline justify-between">
-        <div className="flex items-baseline gap-3">
-          <code className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
-            {cell.cell.id}
-          </code>
-          <span className="text-xs uppercase tracking-wide text-zinc-500">
-            {cell.cell.lens}
-          </span>
-        </div>
+      <header className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-medium text-zinc-100">
+          {humanizeCellId(cell.cell.id)}
+        </h2>
         {cell.error === null && cell.result !== null && (
           <span className="font-mono text-xs text-zinc-500">
-            {cell.result.row_count} row(s) · {cell.durationMs}ms
+            {cell.result.row_count} row{cell.result.row_count === 1 ? "" : "s"}
+            {" · "}
+            {cell.durationMs}ms
           </span>
         )}
       </header>
@@ -270,33 +277,108 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
   );
 }
 
-function ApprovalsBadge({
-  state,
+function LoadingSkeleton({
+  cellTitles,
 }: {
-  state: Record<string, unknown>;
-}): React.ReactElement | null {
-  const approvals = (state.approvals as Record<string, string> | undefined) ?? {};
-  const entries = Object.entries(approvals);
-  if (entries.length === 0) return null;
+  cellTitles: string[];
+}): React.ReactElement {
   return (
-    <aside className="mt-8 rounded-md border border-zinc-800 bg-zinc-900/60 p-4 text-xs">
-      <p className="mb-1 uppercase tracking-wide text-zinc-500">Approvals (in-memory)</p>
-      <ul className="font-mono text-zinc-300">
-        {entries.map(([id, status]) => (
-          <li key={id}>
-            <span className="text-zinc-500">{id}</span> · {status}
-          </li>
-        ))}
-      </ul>
-    </aside>
+    <div className="space-y-6">
+      {cellTitles.map((id) => (
+        <section
+          key={id}
+          className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5"
+        >
+          <header className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="text-base font-medium text-zinc-400">
+              {humanizeCellId(id)}
+            </h2>
+            <SkeletonBar w="w-20" />
+          </header>
+          <div className="space-y-2">
+            <SkeletonBar w="w-full" />
+            <SkeletonBar w="w-5/6" />
+            <SkeletonBar w="w-2/3" />
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 
-function condenseMutationError(raw: string): string {
-  const match = raw.match(/^(omnigraph-server\s+\S+\s+returned\s+\d+:\s+)?(\{.*"error":"([^"]*)")/);
-  if (match) {
-    const inner = match[3]!;
-    return inner.replace(/,\s+\/[^\s]+\.rs:\d+:\d+/, "").trim();
-  }
-  return raw.split("\n")[0]!.slice(0, 240);
+function SkeletonBar({ w }: { w: string }): React.ReactElement {
+  // Two-tone pulse — the bg gives the bar a baseline, animate-pulse
+  // dims it cyclically. h-3 default; callers can include h-* in `w`.
+  const hasHeight = /\bh-/.test(w);
+  return (
+    <span
+      className={
+        "inline-block animate-pulse rounded bg-zinc-800 " +
+        (hasHeight ? "" : "h-3 ") +
+        w
+      }
+    />
+  );
+}
+
+function ErrorPanel({
+  error,
+  onDismiss,
+}: {
+  error: ClassifiedError;
+  onDismiss: () => void;
+}): React.ReactElement {
+  const tone =
+    error.kind === "conflict"
+      ? "border-amber-700 bg-amber-950/40"
+      : error.kind === "permission"
+        ? "border-red-700 bg-red-950/40"
+        : error.kind === "network"
+          ? "border-zinc-700 bg-zinc-900/60"
+          : "border-red-800 bg-red-950/40";
+  const titleTone =
+    error.kind === "conflict"
+      ? "text-amber-200"
+      : error.kind === "network"
+        ? "text-zinc-300"
+        : "text-red-200";
+  return (
+    <aside
+      role="alert"
+      className={"mt-6 rounded-md border p-4 text-sm " + tone}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p
+            className={
+              "mb-1 font-mono text-xs uppercase tracking-wide " + titleTone
+            }
+          >
+            {error.kind}
+          </p>
+          <p className={"font-medium " + titleTone}>{error.title}</p>
+          <p className="mt-1 text-zinc-300">{error.body}</p>
+          {error.suggestion && (
+            <p className="mt-2 text-zinc-400">{error.suggestion}</p>
+          )}
+          <details className="mt-3 text-xs text-zinc-500">
+            <summary className="cursor-pointer hover:text-zinc-300">
+              raw error
+            </summary>
+            <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 font-mono text-zinc-400">
+              {error.raw}
+            </pre>
+          </details>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="dismiss"
+          className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+        >
+          ✕
+        </button>
+      </div>
+    </aside>
+  );
 }
