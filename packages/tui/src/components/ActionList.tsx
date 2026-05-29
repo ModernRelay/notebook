@@ -66,7 +66,7 @@ export function ActionList({
             `[debug] ActionList press: row=${focusedRow} action=${focusedAction} id=${id}\n`,
           );
         }
-        fireAction(actions, act, id);
+        fireAction(actions, act, id, p.runtime?.cell_id);
       }
     },
     { isActive: cellFocused },
@@ -199,11 +199,12 @@ function fireAction(
   actions: ReturnType<typeof useActions>,
   act: ActionDescriptor,
   id: string,
+  cellId?: string,
 ): void {
   if (act.mutation) {
     actions.execute({
       action: "mutate",
-      params: { ...act.mutation, target_id: id },
+      params: { ...act.mutation, target_id: id, __cell_id: cellId },
     });
   } else if (act.action) {
     actions.execute({ action: act.action, params: { id } });

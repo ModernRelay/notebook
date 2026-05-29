@@ -22,7 +22,8 @@ Both render the same six cells against the in-memory `examples/fixtures/company-
 | `@omnigraph/notebook-spec` | Zod schemas for the notebook YAML + structured query DSL. |
 | `@omnigraph/fixture` | In-memory loader + nodes/path/ego query runner. |
 | `@omnigraph/catalog` | Shared `lensComponents` map + `assembleLensSpec` helper. |
-| `@omnigraph/executor` | `runNotebook(notebook, source)` cell loop. |
+| `@omnigraph/runtime` | Notebook runtime for source capabilities, execution, state, actions, and mutations. |
+| `@omnigraph/client` | HTTP client + live `ServerSource` adapter for omnigraph-server. |
 | `@omnigraph/tui` | Ink renderer + the `omnigraph-tui` binary. |
 | `@omnigraph/web` | Vite + React + Tailwind v4 SPA. |
 

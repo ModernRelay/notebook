@@ -1,24 +1,18 @@
-import type { FixtureQuery, MutationParams, MutationResult } from "@omnigraph/notebook-spec";
+import type { MutationResult } from "@omnigraph/notebook-spec";
+import type {
+  ExecutionContext,
+  MutationCommand,
+  MutationContext,
+  ReadOutput,
+  ReadRequest,
+  Source,
+  SourceCapabilities,
+} from "@omnigraph/runtime";
 import type { Fixture } from "./validator.js";
 import { runFixtureQuery } from "./runner.js";
 
-export interface FixtureReadInput {
-  query_source?: string;
-  query_name?: string;
-  params?: Record<string, unknown>;
-  branch?: string;
-  snapshot?: string;
-  fixture_query?: FixtureQuery;
-  cell_id?: string;
-}
-
-export interface FixtureReadOutput {
-  query_name: string;
-  target: string;
-  row_count: number;
-  columns: string[];
-  rows: Record<string, unknown>[];
-}
+export type FixtureReadInput = ReadRequest;
+export type FixtureReadOutput = ReadOutput;
 
 /**
  * In-memory source. Mutations update the underlying fixture object in
@@ -26,20 +20,34 @@ export interface FixtureReadOutput {
  * fixture mutates **per-process**: changes do not persist across TUI
  * restarts. (Future: optional writeback to disk.)
  */
-export class FixtureSource {
+export class FixtureSource implements Source {
   constructor(private readonly fixture: Fixture) {}
 
-  async read(input: FixtureReadInput): Promise<FixtureReadOutput> {
-    if (!input.fixture_query) {
+  capabilities(): SourceCapabilities {
+    return {
+      structuredQueryKinds: ["nodes", "path", "ego"],
+      rawGq: false,
+      mutationKinds: ["set_field"],
+      branchReads: false,
+      snapshotReads: false,
+      branchWrites: false,
+    };
+  }
+
+  async read(
+    input: FixtureReadInput,
+    _context: ExecutionContext,
+  ): Promise<FixtureReadOutput> {
+    if (!input.fixtureQuery) {
       throw new Error(
         "FixtureSource.read called without `fixture_query`; the notebook " +
           "may be mixing server-mode cells (`query.source`) with a fixture-mode " +
           "notebook header. Set `query.fixture: { kind: ... }` on each cell.",
       );
     }
-    const { columns, rows } = runFixtureQuery(input.fixture_query, this.fixture);
+    const { columns, rows } = runFixtureQuery(input.fixtureQuery, this.fixture);
     return {
-      query_name: input.query_name ?? input.cell_id ?? "fixture",
+      query_name: input.queryName ?? input.cellId ?? "fixture",
       target: "fixture",
       row_count: rows.length,
       columns,
@@ -47,7 +55,11 @@ export class FixtureSource {
     };
   }
 
-  async mutate(params: MutationParams): Promise<MutationResult> {
+  async mutate(
+    command: MutationCommand,
+    _context: MutationContext,
+  ): Promise<MutationResult> {
+    const params = command.params;
     switch (params.kind) {
       case "set_field": {
         const node = this.fixture.nodes.find((n) => n.id === params.target_id);

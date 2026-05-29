@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { JSONUIProvider, Renderer } from "@json-render/ink";
-import type { MutationParams, Notebook } from "@omnigraph/notebook-spec";
+import type { Notebook } from "@omnigraph/notebook-spec";
 import {
-  getMutationSource,
-  runNotebook,
-  setAtPointer,
+  createNotebookRuntime,
   type CellExecution,
-  type NotebookExecution,
+  type RuntimeSnapshot,
   type Source,
-} from "@omnigraph/executor";
+} from "@omnigraph/runtime";
 import { inkRegistry } from "./registry.js";
 
 interface AppProps {
@@ -23,7 +21,7 @@ interface AppProps {
 
 type Status =
   | { kind: "running" }
-  | { kind: "done"; execution: NotebookExecution }
+  | { kind: "done" }
   | { kind: "fatal"; message: string };
 
 /**
@@ -40,13 +38,22 @@ export function App({
   label,
   autoExit = false,
 }: AppProps): React.ReactElement {
-  const [status, setStatus] = useState<Status>({ kind: "running" });
-  const [stateModel, setStateModel] = useState<Record<string, unknown>>({});
+  const [runtime] = useState(() =>
+    createNotebookRuntime({ notebook, source }),
+  );
+  const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() =>
+    runtime.getSnapshot(),
+  );
   const [activeCell, setActiveCell] = useState(0);
-  const [mutationError, setMutationError] = useState<string | null>(null);
   const { exit } = useApp();
+  const status: Status =
+    snapshot.status === "fatal"
+      ? { kind: "fatal", message: snapshot.error ?? "runtime failed" }
+      : snapshot.status === "ready"
+        ? { kind: "done" }
+        : { kind: "running" };
 
-  const cells = status.kind === "done" ? status.execution.cells : [];
+  const cells = snapshot.cells;
   const cellCount = cells.length;
 
   useInput((input) => {
@@ -76,26 +83,11 @@ export function App({
           `[debug] onStateChange: ${changes.map((c) => `${c.path}=${JSON.stringify(c.value)}`).join(", ")}\n`,
         );
       }
-      setStateModel((prev) => {
-        let next = prev;
-        for (const { path, value } of changes) {
-          next = setAtPointer(next, path, value);
-        }
-        return next;
-      });
+      runtime.applyStateChanges(changes);
     },
-    [],
+    [runtime],
   );
 
-  // useActions().execute() resolves handlers from JSONUIProvider.handlers,
-  // not from defineRegistry.actions. Register the mutate path here so the
-  // ActionList → execute({ action: "mutate", ... }) round-trip actually
-  // dispatches.
-  // Handlers MUST swallow mutation errors. json-render's executeAction
-  // re-throws whatever the handler throws — and an unhandled async
-  // rejection from useInput's keypress dispatch will crash the Node
-  // process out of Ink's render. Catch here, render the message inline,
-  // and keep the TUI alive.
   const handlers = useMemo(
     () => ({
       mutate: async (params: Record<string, unknown>) => {
@@ -104,44 +96,25 @@ export function App({
             `[debug] mutate handler entered: ${JSON.stringify(params)}\n`,
           );
         }
-        try {
-          await getMutationSource().mutate!(params as MutationParams);
-          setMutationError(null);
-          // Bump our state mirror to trigger executor re-run; the
-          // refreshed read shows the new field value.
-          setStateModel((prev) => ({
-            ...prev,
-            __mutation_epoch__: Date.now(),
-          }));
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          setMutationError(condenseMutationError(message));
-        }
+        await runtime.dispatch("mutate", { params });
       },
     }),
-    [],
+    [runtime],
   );
 
   useEffect(() => {
-    let cancelled = false;
-    runNotebook(notebook, source, { state: stateModel })
-      .then((execution) => {
-        if (!cancelled) {
-          setStatus({ kind: "done", execution });
-          if (autoExit) setTimeout(() => exit(), 200);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : String(err);
-          setStatus({ kind: "fatal", message });
-          if (autoExit) setTimeout(() => exit(), 200);
-        }
-      });
+    const unsubscribe = runtime.subscribe(() => setSnapshot(runtime.getSnapshot()));
     return () => {
-      cancelled = true;
+      unsubscribe();
+      runtime.dispose();
     };
-  }, [notebook, source, stateModel, exit, autoExit]);
+  }, [runtime]);
+
+  useEffect(() => {
+    if (autoExit && (snapshot.status === "ready" || snapshot.status === "fatal")) {
+      setTimeout(() => exit(), 200);
+    }
+  }, [autoExit, exit, snapshot.finishedAt, snapshot.status]);
 
   // Clamp active cell when count changes (e.g. notebook reload).
   const safeActive = Math.min(activeCell, Math.max(0, cellCount - 1));
@@ -194,16 +167,16 @@ export function App({
           </Box>
         )}
 
-        {mutationError !== null && (
+        {snapshot.mutationError !== null && (
           <Box marginTop={1} flexDirection="column">
             <Text color="red">mutation error</Text>
             <Text color="red" dimColor>
-              {mutationError}
+              {condenseMutationError(snapshot.mutationError)}
             </Text>
           </Box>
         )}
 
-        <ApprovalsFooter state={stateModel} />
+        <ApprovalsFooter state={snapshot.state} />
 
         {/* Footer: nav keys */}
         {!autoExit && (

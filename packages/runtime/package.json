@@ -1,8 +1,8 @@
 {
-  "name": "@omnigraph/executor",
+  "name": "@omnigraph/runtime",
   "version": "0.0.1",
   "private": true,
-  "description": "Sequential notebook executor — duck-typed against any source with a `read()` method.",
+  "description": "Notebook runtime for execution, state, action dispatch, source capabilities, and mutation lifecycle.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",

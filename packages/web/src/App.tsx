@@ -1,172 +1,104 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
-import { parseNotebook } from "@omnigraph/notebook-spec";
-import { Client, ServerSource } from "@omnigraph/client";
 import {
-  runNotebook,
-  setAtPointer,
-  setMutationSource,
-  type NotebookExecution,
+  createNotebookRuntime,
   type CellExecution,
-  type Source,
-} from "@omnigraph/executor";
-
-// Notebook is bundled at build-time. For now we point at the sibling
-// omnigraph-demo repo (BioHelix scenario, Hermes' review branch); a
-// future iteration will load the notebook from the server itself so
-// switching dashboards doesn't require a rebuild.
-import notebookYaml from "../../../../omnigraph-demo/dashboard.notebook.yaml?raw";
+  type RuntimeSnapshot,
+} from "@omnigraph/runtime";
 
 import { webRegistry } from "./registry.js";
-import { keyOf, optimisticStore } from "./optimistic-store.js";
 import {
   classifyMutationError,
   type ClassifiedError,
 } from "./error-classifier.js";
+import { buildConfig, type AppConfig } from "./config.js";
 
-interface AppConfig {
-  notebook: ReturnType<typeof parseNotebook>;
-  source: Source;
-  /** Display label for the header — the live server URL. */
-  label: string;
-}
-
-function readToken(): string | undefined {
-  const url = new URL(window.location.href);
-  const fromUrl = url.searchParams.get("token");
-  if (fromUrl) {
-    window.localStorage.setItem("omnigraph_token", fromUrl);
-    return fromUrl;
-  }
-  return window.localStorage.getItem("omnigraph_token") ?? "devtoken";
-}
-
-function buildConfig(): AppConfig {
-  const notebook = parseNotebook(notebookYaml);
-  if (!notebook.server) {
-    throw new Error(
-      "Notebook is missing top-level `server:` URL — server mode requires it.",
-    );
-  }
-  const client = new Client({ baseUrl: notebook.server, token: readToken() });
-  const source = new ServerSource(client);
-  return { notebook, source, label: notebook.server };
-}
-
-type Status =
+type ConfigStatus =
   | { kind: "loading" }
-  | { kind: "ready"; execution: NotebookExecution; runEpoch: number }
+  | { kind: "ready"; config: AppConfig }
   | { kind: "fatal"; message: string };
 
 export function App(): React.ReactElement {
-  const [config] = useState<AppConfig>(() => {
-    const c = buildConfig();
-    setMutationSource(c.source);
-    return c;
+  const [configStatus, setConfigStatus] = useState<ConfigStatus>({
+    kind: "loading",
   });
-  const [status, setStatus] = useState<Status>({ kind: "loading" });
-  const [stateModel, setStateModel] = useState<Record<string, unknown>>({});
-  const [mutationError, setMutationError] = useState<ClassifiedError | null>(
-    null,
-  );
 
-  // Mutation epoch — each /change call we kick off bumps this so the
-  // executor re-runs against the new manifest version. Patches in the
-  // optimistic-store remember which epoch they were issued at so they
-  // can be reconciled once the corresponding executor run completes.
-  const epochRef = useRef(0);
+  useEffect(() => {
+    let cancelled = false;
+    buildConfig()
+      .then((config) => {
+        if (!cancelled) setConfigStatus({ kind: "ready", config });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setConfigStatus({
+            kind: "fatal",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (configStatus.kind === "loading") {
+    return (
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        <LoadingSkeleton cellTitles={["loading"]} />
+      </main>
+    );
+  }
+  if (configStatus.kind === "fatal") {
+    return (
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        <FatalPanel title="Failed to load notebook" message={configStatus.message} />
+      </main>
+    );
+  }
+  return <RuntimeApp config={configStatus.config} />;
+}
+
+function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
+  const [runtime] = useState(() =>
+    createNotebookRuntime({ notebook: config.notebook, source: config.source }),
+  );
+  const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() =>
+    runtime.getSnapshot(),
+  );
+  const [dismissedMutationError, setDismissedMutationError] =
+    useState<string | null>(null);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
-      setStateModel((prev) => {
-        let next = prev;
-        for (const { path, value } of changes) {
-          next = setAtPointer(next, path, value);
-        }
-        return next;
-      });
+      runtime.applyStateChanges(changes);
     },
-    [],
+    [runtime],
   );
 
   const handlers = useMemo(
     () => ({
       mutate: async (params: Record<string, unknown>) => {
-        const target_type = String(params.target_type ?? "");
-        const target_id = String(params.target_id ?? "");
-        const field = String(params.field ?? "");
-        const value = params.value;
-        const key =
-          target_type && target_id && field
-            ? keyOf({ target_type, target_id, field })
-            : null;
-
-        // Optimistic patch goes in BEFORE the network call — the lens
-        // re-renders the next frame with the user's intended value.
-        const clickedAtEpoch = epochRef.current;
-        if (key) {
-          optimisticStore.set({
-            target_type,
-            target_id,
-            field,
-            value,
-            clickedAtEpoch,
-          });
-        }
-
-        try {
-          if (!config.source.mutate) {
-            throw new Error("ServerSource does not support mutations");
-          }
-          await config.source.mutate(
-            params as Parameters<NonNullable<Source["mutate"]>>[0],
-          );
-          setMutationError(null);
-          if (key) optimisticStore.markSaved(key);
-          // Bump epoch → useEffect re-runs runNotebook → fresh data
-          // overrides the patch on the NEXT successful run.
-          epochRef.current = Date.now();
-          setStateModel((prev) => ({
-            ...prev,
-            __mutation_epoch__: epochRef.current,
-          }));
-        } catch (err) {
-          if (key) optimisticStore.clear(key);
-          const message = err instanceof Error ? err.message : String(err);
-          setMutationError(classifyMutationError(message));
-        }
+        setDismissedMutationError(null);
+        await runtime.dispatch("mutate", { params });
       },
     }),
-    [config.source],
+    [runtime],
   );
 
   useEffect(() => {
-    let cancelled = false;
-    const startedAt = epochRef.current;
-    runNotebook(config.notebook, config.source, { state: stateModel })
-      .then((execution) => {
-        if (cancelled) return;
-        setStatus({ kind: "ready", execution, runEpoch: startedAt });
-        // Fresh data has landed; any patch issued before this run is
-        // now redundant (server value either matches the patch — UI is
-        // unchanged — or diverges, in which case server wins).
-        optimisticStore.reconcile(startedAt + 1);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        setStatus({ kind: "fatal", message });
-      });
+    const unsubscribe = runtime.subscribe(() => setSnapshot(runtime.getSnapshot()));
     return () => {
-      cancelled = true;
+      unsubscribe();
+      runtime.dispose();
     };
-  }, [config.notebook, config.source, stateModel]);
+  }, [runtime]);
+
+  const mutationError: ClassifiedError | null =
+    snapshot.mutationError !== null &&
+    snapshot.mutationError !== dismissedMutationError
+      ? classifyMutationError(snapshot.mutationError)
+      : null;
 
   return (
     <JSONUIProvider
@@ -189,33 +121,34 @@ export function App(): React.ReactElement {
             </p>
           </div>
           <span className="rounded-full bg-green-900/60 px-3 py-1 font-mono text-xs uppercase tracking-wide text-green-300">
-            live
+            {config.mode}
           </span>
         </header>
 
-        {status.kind === "loading" && (
+        {snapshot.status === "loading" && (
           <LoadingSkeleton
             cellTitles={config.notebook.cells.map((c) => c.id)}
           />
         )}
-        {status.kind === "fatal" && (
-          <div className="rounded-md border border-red-800 bg-red-950/40 p-4">
-            <p className="font-mono uppercase tracking-wide text-red-300">
-              Failed to load notebook
-            </p>
-            <p className="mt-1 text-red-200">{status.message}</p>
-          </div>
+        {snapshot.status === "fatal" && (
+          <FatalPanel
+            title="Failed to run notebook"
+            message={snapshot.error ?? "runtime failed"}
+          />
         )}
-        {status.kind === "ready" && (
+        {snapshot.status === "ready" && (
           <div className="space-y-6">
-            {status.execution.cells.map((cell) => (
+            {snapshot.cells.map((cell) => (
               <CellCard key={cell.cell.id} cell={cell} />
             ))}
           </div>
         )}
 
         {mutationError !== null && (
-          <ErrorPanel error={mutationError} onDismiss={() => setMutationError(null)} />
+          <ErrorPanel
+            error={mutationError}
+            onDismiss={() => setDismissedMutationError(mutationError.raw)}
+          />
         )}
       </main>
     </JSONUIProvider>
@@ -302,6 +235,23 @@ function LoadingSkeleton({
           </div>
         </section>
       ))}
+    </div>
+  );
+}
+
+function FatalPanel({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}): React.ReactElement {
+  return (
+    <div className="rounded-md border border-red-800 bg-red-950/40 p-4">
+      <p className="font-mono uppercase tracking-wide text-red-300">
+        {title}
+      </p>
+      <p className="mt-1 text-red-200">{message}</p>
     </div>
   );
 }

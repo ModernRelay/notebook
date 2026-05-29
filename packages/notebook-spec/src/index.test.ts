@@ -20,7 +20,7 @@ cells:
     expect(nb.cells[0]?.query.fixture?.kind).toBe("nodes");
   });
 
-  it("parses a server-mode notebook", () => {
+  it("keeps deprecated raw .gq server-mode query.source accepted", () => {
     const yaml = `
 version: 1
 title: Server

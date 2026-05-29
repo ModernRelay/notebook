@@ -130,9 +130,17 @@ export function assembleLensSpec(
   lens: LensKind,
   authorProps: unknown,
   result: QueryResult,
-  extra?: { on?: Record<string, ActionBinding>; visible?: VisibilityCondition },
+  extra?: {
+    on?: Record<string, ActionBinding>;
+    visible?: VisibilityCondition;
+    runtimeProps?: Record<string, unknown>;
+  },
 ): LensSpec {
-  const runtimeProps = buildRuntimeProps(lens, authorProps, result);
+  const baseProps = buildRuntimeProps(lens, authorProps, result);
+  const runtimeProps =
+    extra?.runtimeProps !== undefined
+      ? { ...baseProps, ...extra.runtimeProps }
+      : baseProps;
   return {
     root: cellId,
     elements: { [cellId]: buildElement(lens, runtimeProps, extra) },
@@ -160,7 +168,11 @@ export function assembleControlSpec(
 function buildElement(
   type: ComponentKind,
   props: Record<string, unknown>,
-  extra?: { on?: Record<string, ActionBinding>; visible?: VisibilityCondition },
+  extra?: {
+    on?: Record<string, ActionBinding>;
+    visible?: VisibilityCondition;
+    runtimeProps?: Record<string, unknown>;
+  },
 ): LensElement {
   const el: LensElement = { type, props };
   if (extra?.on !== undefined && Object.keys(extra.on).length > 0) {

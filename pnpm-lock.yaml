@@ -33,28 +33,12 @@ importers:
 
   packages/client:
     dependencies:
-      '@omnigraph/executor':
-        specifier: workspace:*
-        version: link:../executor
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec
-    devDependencies:
-      vitest:
-        specifier: ^4.1.5
-        version: 4.1.5(@types/node@25.6.2)(vite@8.0.11(@types/node@25.6.2)(jiti@2.7.0)(yaml@2.8.4))
-
-  packages/executor:
-    dependencies:
-      '@json-render/core':
-        specifier: ^0.19.0
-        version: 0.19.0(zod@4.4.3)
-      '@omnigraph/catalog':
+      '@omnigraph/runtime':
         specifier: workspace:*
-        version: link:../catalog
-      '@omnigraph/notebook-spec':
-        specifier: workspace:*
-        version: link:../notebook-spec
+        version: link:../runtime
     devDependencies:
       vitest:
         specifier: ^4.1.5
@@ -65,6 +49,9 @@ importers:
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec
+      '@omnigraph/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -86,6 +73,22 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@25.6.2)(vite@8.0.11(@types/node@25.6.2)(jiti@2.7.0)(yaml@2.8.4))
 
+  packages/runtime:
+    dependencies:
+      '@json-render/core':
+        specifier: ^0.19.0
+        version: 0.19.0(zod@4.4.3)
+      '@omnigraph/catalog':
+        specifier: workspace:*
+        version: link:../catalog
+      '@omnigraph/notebook-spec':
+        specifier: workspace:*
+        version: link:../notebook-spec
+    devDependencies:
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.2)(vite@8.0.11(@types/node@25.6.2)(jiti@2.7.0)(yaml@2.8.4))
+
   packages/tui:
     dependencies:
       '@json-render/core':
@@ -100,15 +103,15 @@ importers:
       '@omnigraph/client':
         specifier: workspace:*
         version: link:../client
-      '@omnigraph/executor':
-        specifier: workspace:*
-        version: link:../executor
       '@omnigraph/fixture':
         specifier: workspace:*
         version: link:../fixture
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec
+      '@omnigraph/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       ink:
         specifier: ^6.0.0
         version: 6.8.0(@types/react@19.2.14)(react@19.2.6)
@@ -143,12 +146,15 @@ importers:
       '@omnigraph/client':
         specifier: workspace:*
         version: link:../client
-      '@omnigraph/executor':
+      '@omnigraph/fixture':
         specifier: workspace:*
-        version: link:../executor
+        version: link:../fixture
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec
+      '@omnigraph/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       react:
         specifier: ^19.2.6
         version: 19.2.6

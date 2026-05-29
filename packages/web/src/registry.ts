@@ -1,8 +1,7 @@
 import { defineCatalog } from "@json-render/core";
 import { schema, defineRegistry } from "@json-render/react";
 import { lensActions, lensComponents } from "@omnigraph/catalog";
-import { getMutationSource, setAtPointer } from "@omnigraph/executor";
-import type { MutationParams } from "@omnigraph/notebook-spec";
+import { setAtPointer } from "@omnigraph/runtime";
 import { Table } from "./components/Table.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";
@@ -28,9 +27,8 @@ const { registry: webRegistry } = defineRegistry(catalog, {
       };
       setState((prev) => setAtPointer(prev, statePath, value));
     },
-    mutate: async (params, setState) => {
-      await getMutationSource().mutate!(params as MutationParams);
-      setState((prev) => setAtPointer(prev, "/__mutation_epoch__", Date.now()));
+    mutate: async () => {
+      throw new Error("mutate action must be handled by NotebookRuntime");
     },
   },
 });

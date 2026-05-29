@@ -1,7 +1,6 @@
-import React, { useSyncExternalStore } from "react";
+import React from "react";
 import { useActions, useStateValue } from "@json-render/react";
 import type { ActionListRuntimeProps } from "@omnigraph/catalog";
-import { keyOf, optimisticStore, type Patch } from "../optimistic-store.js";
 
 interface ComponentCtx<P> {
   props: P;
@@ -32,33 +31,16 @@ function fireAction(
   actions: ReturnType<typeof useActions>,
   act: ActionDescriptor,
   id: string,
+  cellId: string | undefined,
 ): void {
   if (act.mutation) {
     actions.execute({
       action: "mutate",
-      params: { ...act.mutation, target_id: id },
+      params: { ...act.mutation, target_id: id, __cell_id: cellId },
     });
   } else if (act.action) {
     actions.execute({ action: act.action, params: { id } });
   }
-}
-
-/**
- * For a given row, look up any optimistic patch that targets its
- * status field. Returns the patch if one is active, else undefined.
- * Reads `target_type` from the first action's mutation spec — all
- * actions on a single ActionList target the same node type by
- * construction (Approve and Reject both flip the same row).
- */
-function lookupOptimisticPatch(
-  patches: ReadonlyMap<string, Patch>,
-  p: ActionListRuntimeProps,
-  id: string,
-): Patch | undefined {
-  if (!p.status_field || !id) return undefined;
-  const target_type = p.actions.find((a) => a.mutation)?.mutation?.target_type;
-  if (!target_type) return undefined;
-  return patches.get(keyOf({ target_type, target_id: id, field: p.status_field }));
 }
 
 export function ActionList({
@@ -67,14 +49,6 @@ export function ActionList({
   const actions = useActions();
   const statusMap =
     useStateValue<Record<string, string>>(p.status_state ?? "/__never__") ?? {};
-
-  // Re-render whenever the optimistic store changes — applied patches
-  // and in-flight "saving" indicators both live there.
-  const patches = useSyncExternalStore(
-    optimisticStore.subscribe,
-    optimisticStore.getSnapshot,
-    optimisticStore.getServerSnapshot,
-  );
 
   if (p.rows.length === 0) {
     return <p className="italic text-zinc-500">(no items)</p>;
@@ -98,9 +72,9 @@ export function ActionList({
             : id
               ? statusMap[id]
               : undefined;
-        const patch = lookupOptimisticPatch(patches, p, id);
-        const status = patch ? String(patch.value) : baseStatus;
-        const saving = patch?.savingSince != null;
+        const mutationState = id ? p.runtime?.mutation_state?.[id] : undefined;
+        const status = baseStatus;
+        const saving = mutationState?.saving === true;
         // The "active" action is whichever one would re-apply the
         // current status — its button gets a subdued look so the
         // OTHER action (the one that toggles to a new state) is the
@@ -160,7 +134,7 @@ export function ActionList({
                     key={`${aIdx}-${act.action ?? "mutate"}`}
                     type="button"
                     disabled={saving}
-                    onClick={() => fireAction(actions, act, id)}
+                    onClick={() => fireAction(actions, act, id, p.runtime?.cell_id)}
                     aria-pressed={isCurrent}
                     className={
                       "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 " +

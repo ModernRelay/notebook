@@ -16,7 +16,8 @@
     "@json-render/react": "^0.19.0",
     "@omnigraph/catalog": "workspace:*",
     "@omnigraph/client": "workspace:*",
-    "@omnigraph/executor": "workspace:*",
+    "@omnigraph/fixture": "workspace:*",
+    "@omnigraph/runtime": "workspace:*",
     "@omnigraph/notebook-spec": "workspace:*",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
