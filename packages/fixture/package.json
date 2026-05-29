@@ -24,6 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@omnigraph/runtime": "workspace:*",
     "@omnigraph/notebook-spec": "workspace:*",
     "zod": "^4.4.3"
   },

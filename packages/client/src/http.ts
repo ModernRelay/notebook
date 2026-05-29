@@ -65,11 +65,17 @@ export class Client {
   constructor(opts: ClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
     this.token = opts.token ?? process.env.OMNIGRAPH_TOKEN;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // Bind to globalThis: in browsers, calling `fetch` with `this`
+    // pointing at a non-Window receiver throws "Illegal invocation".
+    // Storing the global as a class member makes `this.fetchImpl(...)`
+    // call it as a method on the Client instance unless we bind it
+    // explicitly here. Node 18+'s fetch is permissive and worked
+    // without this, which is why the TUI never tripped.
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
   }
 
-  read(body: ReadInput): Promise<ReadOutput> {
-    return this.json<ReadOutput>("POST", "/read", body);
+  read(body: ReadInput, signal?: AbortSignal): Promise<ReadOutput> {
+    return this.json<ReadOutput>("POST", "/read", body, signal);
   }
 
   /**
@@ -78,8 +84,8 @@ export class Client {
    * ManifestBatchPublisher CAS). Returns 409 with conflict details on
    * concurrent-write loss.
    */
-  change(body: ChangeInput): Promise<ChangeOutput> {
-    return this.json<ChangeOutput>("POST", "/change", body);
+  change(body: ChangeInput, signal?: AbortSignal): Promise<ChangeOutput> {
+    return this.json<ChangeOutput>("POST", "/change", body, signal);
   }
 
   branches(): Promise<BranchListOutput> {
@@ -99,6 +105,7 @@ export class Client {
     method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
@@ -107,6 +114,7 @@ export class Client {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
     const text = await res.text();
     if (!res.ok) {

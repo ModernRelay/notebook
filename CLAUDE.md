@@ -39,7 +39,7 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 |---|---|
 | `@omnigraph/notebook-spec` | Zod schemas + YAML parser for notebooks, fixture-query DSL, mutation specs. |
 | `@omnigraph/catalog` | Component+action definitions (Zod prop schemas) shared by both renderers; `assembleLensSpec` / `assembleControlSpec` produce json-render specs. |
-| `@omnigraph/executor` | `runNotebook` loop, `Source` interface, `$state` pointer resolution, `setMutationSource`/`getMutationSource` bridge. |
+| `@omnigraph/runtime` | Capability-aware notebook runtime: execution, state mirror, dependency invalidation, action dispatch, mutation lifecycle, optimistic reconciliation. |
 | `@omnigraph/fixture` | In-memory `FixtureSource` over JSON graphs; `/node` subpath holds the Node-only fs loader so it stays out of the browser bundle. |
 | `@omnigraph/client` | `ServerSource` + `translateFixtureQuery` / `translateMutation` (fixture DSL → `.gq`) + HTTP client for `/read` and `/change`. |
 | `@omnigraph/tui` | Ink renderer + CLI entry (`bin/omnigraph-tui.js`); host shell for terminal. |
@@ -48,32 +48,32 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 ### Data flow per render
 
 ```
-YAML  ─parseNotebook→  Notebook ─runNotebook→  CellExecution[]  ─Renderer→  UI
-                          │                          │
-                          ▼                          ▼
-                       Source.read()          assembleLensSpec()
-                       (Fixture | Server)     → json-render Spec
+ YAML ─parseNotebook→ Notebook ─createNotebookRuntime→ RuntimeSnapshot ─Renderer→ UI
+                         │                            │
+                         ▼                            ▼
+                 Source.capabilities/read/mutate   assembleLensSpec()
+                 (Fixture | Server)                → json-render Spec
 ```
 
 1. `@omnigraph/notebook-spec` parses+validates YAML against frozen v1 Zod schemas. Defines the `FixtureQuery` DSL (`nodes` / `path` / `ego`) and the `MutationSpec` discriminated union (currently only `set_field`).
-2. `@omnigraph/executor::runNotebook` iterates cells sequentially. For data cells it resolves `{ $state: "/ptr" }` expressions in `query.fixture.where` and `query.params` against the App's state mirror, calls `Source.read()`, then hands the result to `assembleLensSpec` from `@omnigraph/catalog`. Control cells skip the query and pass props through to `assembleControlSpec`. Per-cell errors are captured on `CellExecution.error` — they don't abort the notebook.
+2. `@omnigraph/runtime::createNotebookRuntime` validates notebook compatibility against `Source.capabilities()`, resolves `{ $state: "/ptr" }` expressions for data reads, invalidates only cells whose query dependencies changed, calls `Source.read()`, and hands results to `assembleLensSpec` from `@omnigraph/catalog`. Control cells skip reads and pass props through to `assembleControlSpec`. Per-cell errors are captured on `CellExecution.error`; runtime-level compatibility failures surface on `RuntimeSnapshot.error`.
 3. `@omnigraph/catalog` exports `lensComponents` (Zod prop schemas + descriptions) and `lensActions` (`setState`, `mutate`). Author-time props are validated here; the renderer's `defineCatalog` consumes the same schemas.
-4. The renderer (`packages/tui` or `packages/web`) calls `defineRegistry` against its UI library, supplying concrete Ink or React+Tailwind component implementations under the same component IDs (`Table`, `Path`, …). The App passes each cell's `LensSpec` to `<Renderer />`.
+4. The renderer (`packages/tui` or `packages/web`) calls `defineRegistry` against its UI library, supplying concrete Ink or React+Tailwind component implementations under the same component IDs (`Table`, `Path`, ...). The App subscribes to the runtime snapshot and passes each cell's `LensSpec` to `<Renderer />`.
 
 ### The `Source` interface and its two implementations
 
-Defined in `@omnigraph/executor` as a duck-typed `{ read(input), mutate?(params) }`. The notebook YAML is identical between modes — only the source instance differs:
+Defined in `@omnigraph/runtime` as a capability-aware contract: `capabilities()`, `read(request, context)`, and `mutate(command, context)`. The notebook YAML is identical between modes where source capabilities overlap; unsupported features fail during runtime compatibility validation or with explicit source errors:
 
 - **`FixtureSource`** (`@omnigraph/fixture`): runs the fixture-DSL query against an in-memory JSON graph; mutations update nodes in place per-process (no disk writeback).
-- **`ServerSource`** (`@omnigraph/client`): translates fixture-DSL queries to `.gq` source via `translateFixtureQuery`/`translateMutation` and POSTs to omnigraph-server's `/read` and `/change`. Cells may also bypass translation by setting `query.source` directly to raw `.gq`.
+- **`ServerSource`** (`@omnigraph/client`): translates fixture-DSL queries to `.gq` source via `translateFixtureQuery`/`translateMutation` and POSTs to omnigraph-server's `/read` and `/change`. `ego` queries are decomposed into center/incident reads and merged client-side. Cells may still bypass translation by setting deprecated `query.source` raw `.gq`.
 
-Mode selection: `tui/src/index.tsx` and `web/src/App.tsx` pick a source from `notebook.fixture` (relative JSON path) vs `notebook.server` (URL), with CLI flag (`--server`) or URL flag (`?mode=server`) as overrides.
+Mode selection: `tui/src/index.tsx` and `web/src/App.tsx` pick a source from `notebook.fixture` (relative JSON path) vs `notebook.server` (URL), with CLI flags or URL flags (`?mode=server|fixture`, `?server=...`, `?notebook=...`) as overrides.
 
 ### State + mutations
 
-Both Apps keep a local `stateModel: Record<string, unknown>`. `JSONUIProvider.onStateChange` writes incoming JSON-pointer patches via `setAtPointer`, and that state object is passed back into the next `runNotebook(notebook, source, { state })` call so re-execution is reactive.
+Both Apps instantiate a `NotebookRuntime` and subscribe to `RuntimeSnapshot`. `JSONUIProvider.onStateChange` forwards JSON-pointer patches to `runtime.applyStateChanges()`. The runtime mirrors state, extracts `$state` query dependencies, and re-runs only affected data cells.
 
-Mutations have a special path: action handlers registered with `defineRegistry` cannot capture the App-level `Source` (they're module-scoped), so the App calls `setMutationSource(source)` once at boot and the `mutate` handler reads from `getMutationSource()`. After a successful mutation, the App writes `/__mutation_epoch__: Date.now()` into the state mirror — that triggers the `useEffect` that re-runs the notebook so the lens picks up the new field value. **Handlers must catch their own errors**: json-render's `executeAction` re-throws, and an unhandled rejection inside Ink's `useInput` keypress dispatch crashes the process; both Apps render mutation failures inline via a local `mutationError` state.
+Mutations are runtime-owned. Renderer handlers call `runtime.dispatch("mutate", { params })`; the runtime builds mutation context with the originating cell, read target, write target, current state, and optimistic patch metadata. Branch reads write back to that branch. Snapshot reads write to the runtime default branch when one is configured, otherwise the source default applies. Renderers never read from a global mutation source.
 
 ### Cells, controls, and `cell.controls`
 

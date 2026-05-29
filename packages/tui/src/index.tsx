@@ -27,7 +27,7 @@ import { parseNotebook } from "@omnigraph/notebook-spec";
 import { FixtureSource } from "@omnigraph/fixture";
 import { loadFixture } from "@omnigraph/fixture/node";
 import { Client, ServerSource } from "@omnigraph/client";
-import { setMutationSource, type Source } from "@omnigraph/executor";
+import type { Source } from "@omnigraph/runtime";
 import { App } from "./App.js";
 
 interface ParsedArgs {
@@ -108,10 +108,6 @@ export function main(argv: readonly string[]): void {
     );
     process.exit(2);
   }
-
-  // Register the source for module-level action handlers (e.g. `mutate`)
-  // before <Renderer /> mounts and components fire actions.
-  setMutationSource(source);
 
   render(
     <App

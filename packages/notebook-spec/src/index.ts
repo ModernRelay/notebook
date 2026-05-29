@@ -145,7 +145,8 @@ export type FixtureEgoQuery = z.infer<typeof FixtureEgoQuerySchema>;
 
 const QuerySchema = z
   .object({
-    // .gq mode (server) — used when notebook talks to omnigraph-server.
+    // .gq mode (server). Deprecated escape hatch; prefer structured
+    // `query.fixture` so fixture/server sources can validate parity.
     source: z.string().min(1).optional(),
     name: z.string().optional(),
     params: z.record(z.string(), z.unknown()).optional(),

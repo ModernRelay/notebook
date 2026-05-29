@@ -53,6 +53,20 @@ export type ActionListAuthorProps = z.infer<typeof ActionListAuthorPropsSchema>;
 
 export const ActionListRuntimePropsSchema = ActionListAuthorPropsSchema.extend({
   rows: z.array(z.record(z.string(), z.unknown())),
+  runtime: z
+    .object({
+      cell_id: z.string().min(1),
+      mutation_state: z
+        .record(
+          z.string(),
+          z.object({
+            saving: z.boolean(),
+            error: z.string().optional(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 export type ActionListRuntimeProps = z.infer<typeof ActionListRuntimePropsSchema>;
 
