@@ -62,7 +62,14 @@ export async function buildConfig(): Promise<AppConfig> {
     };
   }
 
-  const server = url.searchParams.get("server") ?? notebook.server;
+  const serverParam = url.searchParams.get("server") ?? notebook.server;
+  // A relative server (e.g. `?server=/og`, the dev-proxy same-origin path)
+  // must be resolved to an absolute URL: the omnigraph SDK builds requests
+  // with `new URL(baseUrl + path)`, which throws on a relative base.
+  const server =
+    serverParam && serverParam.startsWith("/")
+      ? new URL(serverParam, window.location.origin).toString()
+      : serverParam;
   if (!server) {
     throw new Error(
       "Server mode requires top-level `server:` or a `?server=` URL parameter.",

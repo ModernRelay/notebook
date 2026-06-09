@@ -2,9 +2,9 @@ export {
   Client,
   OmnigraphHttpError,
   type ClientOptions,
-  type ReadInput,
+  type QueryInput,
   type ReadOutput,
-  type ChangeInput,
+  type MutateInput,
   type ChangeOutput,
   type BranchListOutput,
 } from "./http.js";

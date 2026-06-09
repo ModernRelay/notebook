@@ -20,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modernrelay/omnigraph": "^0.6.0",
     "@omnigraph/runtime": "workspace:*",
     "@omnigraph/notebook-spec": "workspace:*"
   },

@@ -107,7 +107,7 @@ Run the TUI:
 Probe the persisted clause status (after pressing Approve in the TUI):
   curl -s -H "Authorization: Bearer ${TOKEN}" \\
     -H "Content-Type: application/json" \\
-    -d '{"query_source":"query x() { match { \$c: PolicyClause { id: \"pdr-c1\" } } return { \$c.status as status } }"}' \\
-    ${SERVER_URL}/read
+    -d '{"query":"query x() { match { \$c: PolicyClause { id: \"pdr-c1\" } } return { \$c.status as status } }"}' \\
+    ${SERVER_URL}/query
 
 EOF

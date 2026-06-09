@@ -33,6 +33,9 @@ importers:
 
   packages/client:
     dependencies:
+      '@modernrelay/omnigraph':
+        specifier: ^0.6.0
+        version: 0.6.0
       '@omnigraph/notebook-spec':
         specifier: workspace:*
         version: link:../notebook-spec
@@ -230,6 +233,10 @@ packages:
     resolution: {integrity: sha512-kTW6b6cSNRrlEfCUf/69SLoLn+CufC968ruge9tnQlp9pDTGG/SK8pgM541FdgwMFA4zm3s5mpM3G8rdODKc/A==}
     peerDependencies:
       react: ^19.2.3
+
+  '@modernrelay/omnigraph@0.6.0':
+    resolution: {integrity: sha512-xhl1m8ZjNN4MvrCDawvNp1y4uznqdnI0LsROEy0Y4wNH2moSORcdxweqh60QPnui9ppOEf0STxjJObRDe/LqNg==}
+    engines: {node: '>=22'}
 
   '@napi-rs/wasm-runtime@1.1.4':
     resolution: {integrity: sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow==}
@@ -1054,6 +1061,8 @@ snapshots:
       react: 19.2.6
     transitivePeerDependencies:
       - zod
+
+  '@modernrelay/omnigraph@0.6.0': {}
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:

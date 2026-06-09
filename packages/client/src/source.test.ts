@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Client, ReadInput, ChangeInput } from "./http.js";
+import type { Client, QueryInput, MutateInput } from "./http.js";
 import { ServerSource } from "./source.js";
 import type { ExecutionContext, MutationContext } from "@omnigraph/runtime";
 
@@ -23,8 +23,8 @@ describe("ServerSource", () => {
   });
 
   it("passes raw .gq through as the deprecated escape hatch", async () => {
-    const read = vi.fn(async () => readOutput([]));
-    const source = new ServerSource(fakeClient({ read }));
+    const query = vi.fn(async () => readOutput([]));
+    const source = new ServerSource(fakeClient({ query }));
     await source.read(
       {
         cellId: "raw",
@@ -33,20 +33,20 @@ describe("ServerSource", () => {
       },
       CTX,
     );
-    expect(read.mock.calls[0]?.[0]).toMatchObject({
-      query_source: expect.stringContaining("query q"),
-      query_name: "q",
+    expect(query.mock.calls[0]?.[0]).toMatchObject({
+      query: expect.stringContaining("query q"),
+      name: "q",
     });
   });
 
   it("decomposes ego reads and synthesizes bare-center rows", async () => {
-    const read = vi.fn(async (input: ReadInput) => {
-      if (input.query_name === "decision_neighbors_center") {
+    const query = vi.fn(async (input: QueryInput) => {
+      if (input.name === "decision_neighbors_center") {
         return readOutput([{ id: "d1", name: "D1", __ng_center_id: "d1" }]);
       }
       return readOutput([]);
     });
-    const source = new ServerSource(fakeClient({ read }));
+    const source = new ServerSource(fakeClient({ query }));
     const out = await source.read(
       {
         cellId: "decision-neighbors",
@@ -65,7 +65,7 @@ describe("ServerSource", () => {
       },
       CTX,
     );
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(2);
     expect(out.columns).toEqual(["id", "name", "predicate", "neighbor"]);
     expect(out.rows).toEqual([
       { id: "d1", name: "D1", predicate: null, neighbor: null },
@@ -73,14 +73,14 @@ describe("ServerSource", () => {
   });
 
   it("merges out and in ego incident rows across multiple edge types", async () => {
-    const read = vi.fn(async (input: ReadInput) => {
-      if (input.query_name === "decision_neighbors_center") {
+    const query = vi.fn(async (input: QueryInput) => {
+      if (input.name === "decision_neighbors_center") {
         return readOutput([
           { id: "d1", name: "D1", __ng_center_id: "d1" },
           { id: "d2", name: "D2", __ng_center_id: "d2" },
         ]);
       }
-      if (input.query_name === "decision_neighbors_out_GovernedBy") {
+      if (input.name === "decision_neighbors_out_GovernedBy") {
         return readOutput([
           {
             id: "d1",
@@ -92,7 +92,7 @@ describe("ServerSource", () => {
           },
         ]);
       }
-      if (input.query_name === "decision_neighbors_in_Owns") {
+      if (input.name === "decision_neighbors_in_Owns") {
         return readOutput([
           {
             id: "d1",
@@ -106,7 +106,7 @@ describe("ServerSource", () => {
       }
       return readOutput([]);
     });
-    const source = new ServerSource(fakeClient({ read }));
+    const source = new ServerSource(fakeClient({ query }));
     const out = await source.read(
       {
         cellId: "decision-neighbors",
@@ -127,7 +127,7 @@ describe("ServerSource", () => {
       CTX,
     );
 
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(query).toHaveBeenCalledTimes(3);
     expect(out.rows).toEqual([
       {
         id: "d1",
@@ -154,8 +154,8 @@ describe("ServerSource", () => {
   });
 
   it("passes resolved params into generated ego reads", async () => {
-    const read = vi.fn(async () => readOutput([]));
-    const source = new ServerSource(fakeClient({ read }));
+    const query = vi.fn(async () => readOutput([]));
+    const source = new ServerSource(fakeClient({ query }));
     await source.read(
       {
         cellId: "decision-neighbors",
@@ -170,11 +170,11 @@ describe("ServerSource", () => {
       },
       CTX,
     );
-    expect(read.mock.calls[0]?.[0].params).toMatchObject({
+    expect(query.mock.calls[0]?.[0].params).toMatchObject({
       actor: "andrew",
       w_slug: "d1",
     });
-    expect(read.mock.calls[1]?.[0].params).toMatchObject({
+    expect(query.mock.calls[1]?.[0].params).toMatchObject({
       actor: "andrew",
       w_slug: "d1",
     });
@@ -200,13 +200,13 @@ describe("ServerSource", () => {
   });
 
   it("uses mutation write target branch from runtime context", async () => {
-    const change = vi.fn(async () => ({
+    const mutate = vi.fn(async () => ({
       branch: "review",
       query_name: "ng_mutate",
       affected_nodes: 1,
       affected_edges: 0,
     }));
-    const source = new ServerSource(fakeClient({ change }), { branch: "main" });
+    const source = new ServerSource(fakeClient({ mutate }), { branch: "main" });
     const context: MutationContext = {
       readTarget: { snapshot: "snap" },
       writeTarget: { branch: "review" },
@@ -224,17 +224,17 @@ describe("ServerSource", () => {
       },
       context,
     );
-    expect(change.mock.calls[0]?.[0]).toMatchObject({ branch: "review" });
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ branch: "review" });
   });
 
   it("falls back to ServerSource default branch when runtime has no write branch", async () => {
-    const change = vi.fn(async () => ({
+    const mutate = vi.fn(async () => ({
       branch: "main",
       query_name: "ng_mutate",
       affected_nodes: 1,
       affected_edges: 0,
     }));
-    const source = new ServerSource(fakeClient({ change }), { branch: "main" });
+    const source = new ServerSource(fakeClient({ mutate }), { branch: "main" });
     await source.mutate(
       {
         params: {
@@ -247,13 +247,13 @@ describe("ServerSource", () => {
       },
       { readTarget: { snapshot: "snap" }, writeTarget: {}, state: {} },
     );
-    expect(change.mock.calls[0]?.[0]).toMatchObject({ branch: "main" });
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ branch: "main" });
   });
 });
 
 function fakeClient(overrides: {
-  read?: (input: ReadInput) => Promise<ReturnType<typeof readOutput>>;
-  change?: (input: ChangeInput) => Promise<{
+  query?: (input: QueryInput) => Promise<ReturnType<typeof readOutput>>;
+  mutate?: (input: MutateInput) => Promise<{
     branch: string;
     query_name: string;
     affected_nodes: number;
@@ -261,9 +261,9 @@ function fakeClient(overrides: {
   }>;
 }): Client {
   return {
-    read: overrides.read ?? (async () => readOutput([])),
-    change:
-      overrides.change ??
+    query: overrides.query ?? (async () => readOutput([])),
+    mutate:
+      overrides.mutate ??
       (async () => ({
         branch: "main",
         query_name: "q",
