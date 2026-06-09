@@ -48,6 +48,13 @@ export interface ReadRequest {
 
 export interface ReadOutput {
   query_name: string;
+  /**
+   * The branch (or snapshot id) the read resolved against, normalized to a
+   * single label. The omnigraph server returns a `{branch, snapshot}` object;
+   * the client facade collapses it to this string because nothing in colombo
+   * distinguishes the two — it's display metadata only. Keep it a string
+   * unless/until a consumer needs the structured form.
+   */
   target: string;
   row_count: number;
   columns: string[];
@@ -234,11 +241,22 @@ class NotebookRuntimeImpl implements NotebookRuntime {
 
   applyStateChanges(changes: RuntimeStateChange[]): void {
     if (this.disposed || changes.length === 0) return;
+    // Drop no-op changes: a bound control (e.g. the web Select) can re-emit its
+    // current value on every render, which would otherwise re-run dependent
+    // cells in an endless loop. Only proceed when something actually changed.
+    const effective = changes.filter(
+      (change) =>
+        !valuesEqual(
+          resolveStatePointer(this.snapshot.state, change.path),
+          change.value,
+        ),
+    );
+    if (effective.length === 0) return;
     let next = this.snapshot.state;
-    for (const change of changes) {
+    for (const change of effective) {
       next = setAtPointer(next, change.path, change.value);
     }
-    const changedPaths = changes.map((change) => change.path);
+    const changedPaths = effective.map((change) => change.path);
     this.snapshot = {
       ...this.snapshot,
       state: next,
@@ -873,4 +891,12 @@ function errorMessage(err: unknown): string {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object") {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return false;
 }

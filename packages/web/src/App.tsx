@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import {
   createNotebookRuntime,
   type CellExecution,
+  type NotebookRuntime,
   type RuntimeSnapshot,
 } from "@omnigraph/runtime";
 
@@ -60,42 +61,51 @@ export function App(): React.ReactElement {
 }
 
 function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
-  const [runtime] = useState(() =>
-    createNotebookRuntime({ notebook: config.notebook, source: config.source }),
-  );
-  const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() =>
-    runtime.getSnapshot(),
-  );
+  const runtimeRef = useRef<NotebookRuntime | null>(null);
+  const [snapshot, setSnapshot] = useState<RuntimeSnapshot | null>(null);
   const [dismissedMutationError, setDismissedMutationError] =
     useState<string | null>(null);
 
+  // Create the runtime *inside* the effect (not useState) so React StrictMode's
+  // dev mount → cleanup → mount cycle disposes the first runtime and builds a
+  // fresh one — rather than re-subscribing to a disposed runtime that never
+  // notifies (which leaves the page stuck on the loading skeleton).
+  useEffect(() => {
+    const runtime = createNotebookRuntime({
+      notebook: config.notebook,
+      source: config.source,
+    });
+    runtimeRef.current = runtime;
+    setSnapshot(runtime.getSnapshot());
+    const unsubscribe = runtime.subscribe(() =>
+      setSnapshot(runtime.getSnapshot()),
+    );
+    return () => {
+      unsubscribe();
+      runtime.dispose();
+      runtimeRef.current = null;
+    };
+  }, [config]);
+
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
-      runtime.applyStateChanges(changes);
+      runtimeRef.current?.applyStateChanges(changes);
     },
-    [runtime],
+    [],
   );
 
   const handlers = useMemo(
     () => ({
       mutate: async (params: Record<string, unknown>) => {
         setDismissedMutationError(null);
-        await runtime.dispatch("mutate", { params });
+        await runtimeRef.current?.dispatch("mutate", { params });
       },
     }),
-    [runtime],
+    [],
   );
 
-  useEffect(() => {
-    const unsubscribe = runtime.subscribe(() => setSnapshot(runtime.getSnapshot()));
-    return () => {
-      unsubscribe();
-      runtime.dispose();
-    };
-  }, [runtime]);
-
   const mutationError: ClassifiedError | null =
-    snapshot.mutationError !== null &&
+    snapshot?.mutationError != null &&
     snapshot.mutationError !== dismissedMutationError
       ? classifyMutationError(snapshot.mutationError)
       : null;
@@ -125,18 +135,16 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
           </span>
         </header>
 
-        {snapshot.status === "loading" && (
-          <LoadingSkeleton
-            cellTitles={config.notebook.cells.map((c) => c.id)}
-          />
-        )}
-        {snapshot.status === "fatal" && (
+        {snapshot === null ? (
+          <LoadingSkeleton cellTitles={config.notebook.cells.map((c) => c.id)} />
+        ) : snapshot.status === "fatal" ? (
           <FatalPanel
             title="Failed to run notebook"
             message={snapshot.error ?? "runtime failed"}
           />
-        )}
-        {snapshot.status === "ready" && (
+        ) : (
+          // Render every cell progressively — each shows its own loading /
+          // data / error state, so a slow or failed cell never blanks the page.
           <div className="space-y-6">
             {snapshot.cells.map((cell) => (
               <CellCard key={cell.cell.id} cell={cell} />
@@ -205,6 +213,13 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
       )}
       {cell.error === null && cell.spec !== null && (
         <Renderer spec={cell.spec} registry={webRegistry} />
+      )}
+      {cell.error === null && cell.spec === null && !isControl && (
+        <div className="space-y-2">
+          <SkeletonBar w="w-full" />
+          <SkeletonBar w="w-5/6" />
+          <SkeletonBar w="w-2/3" />
+        </div>
       )}
     </section>
   );
