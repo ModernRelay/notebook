@@ -56,10 +56,10 @@ export class ServerSource implements Source {
           "ServerSource.read: cell has no fixtureQuery and no querySource",
         );
       }
-      return this.client.read(
+      return this.client.query(
         {
-          query_source: input.querySource,
-          ...(input.queryName !== undefined && { query_name: input.queryName }),
+          query: input.querySource,
+          ...(input.queryName !== undefined && { name: input.queryName }),
           ...(input.params !== undefined && { params: input.params }),
           ...this.targetTriple(input),
         },
@@ -76,10 +76,10 @@ export class ServerSource implements Source {
       input.cellId ?? "ng",
     );
     const params = mergeParams(translated.params, input.params);
-    return this.client.read(
+    return this.client.query(
       {
-        query_source: translated.query_source,
-        query_name: translated.query_name,
+        query: translated.query_source,
+        name: translated.query_name,
         params,
         ...this.targetTriple(input),
       },
@@ -93,10 +93,10 @@ export class ServerSource implements Source {
   ): Promise<MutationResult> {
     const translated = translateMutation(command.params, "ng_mutate");
     const branch = context.writeTarget.branch ?? this.opts.branch;
-    const result: ChangeOutput = await this.client.change(
+    const result: ChangeOutput = await this.client.mutate(
       {
-        query_source: translated.query_source,
-        query_name: translated.query_name,
+        query: translated.query_source,
+        name: translated.query_name,
         params: translated.params,
         ...(branch !== undefined && { branch }),
       },
@@ -113,15 +113,26 @@ export class ServerSource implements Source {
   ): Promise<RuntimeReadOutput> {
     const plan = translateEgoQuery(query, sanitizeQueryName(input.cellId));
     const target = this.targetTriple(input);
-    const center = await this.client.read(
-      {
-        query_source: plan.center.query_source,
-        query_name: plan.center.query_name,
-        params: mergeParams(plan.center.params, input.params),
-        ...target,
-      },
-      context.signal,
-    );
+    // Center + every incident read are mutually independent: each incident
+    // query re-binds the center via its own where-clause, and the center read
+    // is only consumed at merge time. So fire them all concurrently rather
+    // than serially — collapses (k+1) round-trips into ~1. (Same uncapped
+    // Promise.all fan-out the runtime uses across cells.)
+    const runRead = (q: TranslatedQuery) =>
+      this.client.query(
+        {
+          query: q.query_source,
+          name: q.query_name,
+          params: mergeParams(q.params, input.params),
+          ...target,
+        },
+        context.signal,
+      );
+
+    const [center, ...incidentResults] = await Promise.all([
+      runRead(plan.center),
+      ...plan.incident.map((part) => runRead(part.query)),
+    ]);
 
     if (query.out.length === 0 && query.in.length === 0) {
       return {
@@ -133,19 +144,7 @@ export class ServerSource implements Source {
       };
     }
 
-    const incidentRows: Record<string, unknown>[] = [];
-    for (const part of plan.incident) {
-      const out = await this.client.read(
-        {
-          query_source: part.query.query_source,
-          query_name: part.query.query_name,
-          params: mergeParams(part.query.params, input.params),
-          ...target,
-        },
-        context.signal,
-      );
-      incidentRows.push(...out.rows);
-    }
+    const incidentRows = incidentResults.flatMap((result) => result.rows);
 
     const incidentCenterIds = new Set(
       incidentRows

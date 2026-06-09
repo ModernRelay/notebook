@@ -1,8 +1,22 @@
 /**
- * Thin HTTP client for omnigraph-server. Maps directly onto the OpenAPI
- * surface — no translation, no business logic. The `ServerSource` wrapper
- * on top translates fixture-DSL queries and MutationSpec into `.gq`.
+ * Thin facade over the official omnigraph SDK (`@modernrelay/omnigraph`).
+ *
+ * The SDK owns the HTTP transport, the OpenAPI-faithful types, and typed
+ * error classes. This `Client` keeps colombo's stable, snake_case surface
+ * (`query`/`mutate`/`branches`/`healthz` + `OmnigraphHttpError`) so the
+ * `ServerSource` adapter, its tests, and the web error-classifier are
+ * unaffected by the SDK swap. It reshapes the SDK's camelCase responses
+ * back to colombo's shapes and re-wraps thrown SDK errors as
+ * `OmnigraphHttpError` to preserve the message contract the UI matches on.
  */
+
+import {
+  Omnigraph,
+  NetworkError,
+  OmnigraphError,
+  type QueryInput as SdkQueryInput,
+  type MutationInput as SdkMutationInput,
+} from "@modernrelay/omnigraph";
 
 export interface ClientOptions {
   baseUrl: string;
@@ -11,9 +25,9 @@ export interface ClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-export interface ReadInput {
-  query_source: string;
-  query_name?: string;
+export interface QueryInput {
+  query: string;
+  name?: string;
   params?: Record<string, unknown>;
   branch?: string;
   snapshot?: string;
@@ -27,9 +41,9 @@ export interface ReadOutput {
   rows: Record<string, unknown>[];
 }
 
-export interface ChangeInput {
-  query_source: string;
-  query_name?: string;
+export interface MutateInput {
+  query: string;
+  name?: string;
   params?: Record<string, unknown>;
   branch?: string;
 }
@@ -58,68 +72,99 @@ export class OmnigraphHttpError extends Error {
 }
 
 export class Client {
-  private readonly baseUrl: string;
-  private readonly token: string | undefined;
-  private readonly fetchImpl: typeof fetch;
+  private readonly og: Omnigraph;
 
   constructor(opts: ClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/$/, "");
-    this.token = opts.token ?? process.env.OMNIGRAPH_TOKEN;
-    // Bind to globalThis: in browsers, calling `fetch` with `this`
-    // pointing at a non-Window receiver throws "Illegal invocation".
-    // Storing the global as a class member makes `this.fetchImpl(...)`
-    // call it as a method on the Client instance unless we bind it
-    // explicitly here. Node 18+'s fetch is permissive and worked
-    // without this, which is why the TUI never tripped.
-    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
+    const token =
+      opts.token ??
+      process.env.OMNIGRAPH_TOKEN ??
+      process.env.OMNIGRAPH_BEARER_TOKEN;
+    this.og = new Omnigraph({
+      baseUrl: opts.baseUrl,
+      ...(token !== undefined ? { token } : {}),
+      ...(opts.fetchImpl !== undefined ? { fetch: opts.fetchImpl } : {}),
+    });
   }
 
-  read(body: ReadInput, signal?: AbortSignal): Promise<ReadOutput> {
-    return this.json<ReadOutput>("POST", "/read", body, signal);
+  async query(body: QueryInput, signal?: AbortSignal): Promise<ReadOutput> {
+    try {
+      const r = await this.og.query(
+        body as SdkQueryInput,
+        signal ? { signal } : {},
+      );
+      return {
+        query_name: r.queryName,
+        target: r.target?.branch ?? r.target?.snapshot ?? "main",
+        row_count: r.rowCount,
+        columns: r.columns ?? [],
+        rows: (r.rows ?? []) as Record<string, unknown>[],
+      };
+    } catch (e) {
+      throw toHttpError(e, "/query");
+    }
   }
 
-  /**
-   * One-shot mutation. The server commits exactly one manifest version
-   * for the touched tables (atomic per call; cross-table OCC enforced via
-   * ManifestBatchPublisher CAS). Returns 409 with conflict details on
-   * concurrent-write loss.
-   */
-  change(body: ChangeInput, signal?: AbortSignal): Promise<ChangeOutput> {
-    return this.json<ChangeOutput>("POST", "/change", body, signal);
+  async mutate(body: MutateInput, signal?: AbortSignal): Promise<ChangeOutput> {
+    try {
+      const r = await this.og.mutate(
+        body as SdkMutationInput,
+        signal ? { signal } : {},
+      );
+      return {
+        branch: r.branch,
+        query_name: r.queryName,
+        affected_nodes: r.affectedNodes,
+        affected_edges: r.affectedEdges,
+        ...(r.actorId != null ? { actor_id: r.actorId } : {}),
+      };
+    } catch (e) {
+      throw toHttpError(e, "/mutate");
+    }
   }
 
-  branches(): Promise<BranchListOutput> {
-    return this.json<BranchListOutput>("GET", "/branches");
+  async branches(): Promise<BranchListOutput> {
+    try {
+      return { branches: await this.og.branches.list() };
+    } catch (e) {
+      throw toHttpError(e, "/branches");
+    }
   }
 
   async healthz(): Promise<void> {
-    const res = await this.fetchImpl(`${this.baseUrl}/healthz`, {
-      method: "GET",
-    });
-    if (!res.ok) {
-      throw new OmnigraphHttpError(res.status, "/healthz", await res.text());
+    try {
+      await this.og.health();
+    } catch (e) {
+      throw toHttpError(e, "/healthz");
     }
   }
+}
 
-  private async json<T>(
-    method: "GET" | "POST" | "DELETE",
-    path: string,
-    body?: unknown,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    const headers: Record<string, string> = {};
-    if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      throw new OmnigraphHttpError(res.status, path, text);
-    }
-    return text ? (JSON.parse(text) as T) : (undefined as unknown as T);
+/**
+ * Normalize a thrown SDK error into `OmnigraphHttpError`, preserving the
+ * message format (`omnigraph-server <path> returned <status>: <body>`) and
+ * embedding the server `code` so the web error-classifier's regexes still
+ * fire. AbortError is re-thrown unchanged so the runtime's cancellation
+ * logic still recognizes it.
+ */
+function toHttpError(e: unknown, path: string): unknown {
+  if (e instanceof Error && e.name === "AbortError") return e;
+  if (e instanceof NetworkError) {
+    return new OmnigraphHttpError(
+      0,
+      path,
+      JSON.stringify({ error: `Failed to fetch — ${e.message}` }),
+    );
   }
+  if (e instanceof OmnigraphError) {
+    return new OmnigraphHttpError(
+      e.status,
+      path,
+      JSON.stringify({
+        error: e.message,
+        ...(e.code ? { code: e.code } : {}),
+      }),
+    );
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  return new OmnigraphHttpError(0, path, JSON.stringify({ error: message }));
 }

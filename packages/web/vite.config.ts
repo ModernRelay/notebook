@@ -11,5 +11,14 @@ export default defineConfig({
       // from the sibling examples/ directory via ?raw and JSON imports).
       allow: ["../../"],
     },
+    // Dev-only: proxy /og → a local omnigraph-server so the browser talks
+    // same-origin (no CORS). Use ?server=/og in the URL to route through it.
+    proxy: {
+      "/og": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/og/, ""),
+      },
+    },
   },
 });

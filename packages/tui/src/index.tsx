@@ -81,8 +81,14 @@ export function main(argv: readonly string[]): void {
   const notebook = parseNotebook(yaml);
 
   // CLI flags > notebook fields. Falls back to env for token only.
+  // OMNIGRAPH_BEARER_TOKEN is the conventional omnigraph env var (server +
+  // CLI use it); accept it so plain `omnigraph-tui <nb>` works without an
+  // OMNIGRAPH_TOKEN alias.
   const serverUrl = args.server ?? notebook.server;
-  const token = args.token ?? process.env.OMNIGRAPH_TOKEN;
+  const token =
+    args.token ??
+    process.env.OMNIGRAPH_TOKEN ??
+    process.env.OMNIGRAPH_BEARER_TOKEN;
 
   let source: Source;
   let label: string;
