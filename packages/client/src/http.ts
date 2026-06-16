@@ -22,6 +22,13 @@ export interface ClientOptions {
   baseUrl: string;
   /** Bearer token. Falls back to `OMNIGRAPH_TOKEN` env var when unset. */
   token?: string;
+  /**
+   * Cluster graph id. omnigraph-server 0.7.0+ is cluster-only: every read and
+   * mutation is served under `/graphs/{graphId}/…`, so a graph id is required.
+   * Without one the SDK throws `ConfigurationError` before issuing any request.
+   * Only `health()` (the flat `/healthz` route) works graph-id-free.
+   */
+  graphId?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -82,6 +89,7 @@ export class Client {
     this.og = new Omnigraph({
       baseUrl: opts.baseUrl,
       ...(token !== undefined ? { token } : {}),
+      ...(opts.graphId !== undefined ? { graphId: opts.graphId } : {}),
       ...(opts.fetchImpl !== undefined ? { fetch: opts.fetchImpl } : {}),
     });
   }

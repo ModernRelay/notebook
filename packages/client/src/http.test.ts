@@ -20,7 +20,13 @@ function fetchReturning(res: Response): typeof fetch {
 }
 
 function clientWith(fetchImpl: typeof fetch): Client {
-  return new Client({ baseUrl: "http://omnigraph.test", fetchImpl });
+  // graphId is required under omnigraph-server 0.7.0 (cluster-only): without
+  // it the SDK throws ConfigurationError before reaching `fetchImpl`.
+  return new Client({
+    baseUrl: "http://omnigraph.test",
+    graphId: "company",
+    fetchImpl,
+  });
 }
 
 describe("Client (SDK-backed facade)", () => {
@@ -103,6 +109,18 @@ describe("Client (SDK-backed facade)", () => {
     const err = await client.query({ query: "q" }).catch((e) => e);
     expect(err).toBeInstanceOf(OmnigraphHttpError);
     expect(err.message).toMatch(RE_NETWORK);
+  });
+
+  it("fails fast (no fetch) when no graphId is set — cluster-only 0.7.0", async () => {
+    const client = new Client({
+      baseUrl: "http://omnigraph.test",
+      fetchImpl: (async () => {
+        throw new Error("fetch should not be called");
+      }) as unknown as typeof fetch,
+    });
+    const err = await client.query({ query: "q" }).catch((e) => e);
+    expect(err).toBeInstanceOf(OmnigraphHttpError);
+    expect(err.message).toMatch(/graphId is required/i);
   });
 
   it("preserves the server error text so the conflict classifier fires", async () => {

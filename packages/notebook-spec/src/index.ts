@@ -231,6 +231,12 @@ export const NotebookSchema = z.object({
   fixture: z.string().min(1).optional(),
   /** omnigraph-server base URL when running in server mode. CLI flag overrides. */
   server: z.url().optional(),
+  /**
+   * Cluster graph id for server mode. omnigraph-server 0.7.0+ is cluster-only:
+   * reads/writes are served under `/graphs/{graph}/…`. Required in server mode;
+   * `--graph` (TUI), `?graph=` (web), or `OMNIGRAPH_GRAPH_ID` (TUI) override it.
+   */
+  graph: z.string().min(1).optional(),
   cells: z.array(CellSchema),
 });
 export type Notebook = z.infer<typeof NotebookSchema>;

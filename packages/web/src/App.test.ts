@@ -14,13 +14,13 @@ describe("buildConfig", () => {
     expect(config.source.capabilities().rawGq).toBe(false);
   });
 
-  it("uses server URL, token, and branch from query params", async () => {
+  it("uses server URL, token, branch, and graph from query params", async () => {
     const storage = stubWindow(
-      "http://127.0.0.1:5173/?mode=server&server=http://example.test&token=tok&branch=review",
+      "http://127.0.0.1:5173/?mode=server&server=http://example.test&token=tok&branch=review&graph=acme",
     );
     const config = await buildConfig();
     expect(config.mode).toBe("server");
-    expect(config.label).toBe("server: http://example.test · review");
+    expect(config.label).toBe("server: http://example.test · graph: acme · review");
     expect(config.source.capabilities().rawGq).toBe(true);
     expect(storage.get("omnigraph_token")).toBe("tok");
   });
