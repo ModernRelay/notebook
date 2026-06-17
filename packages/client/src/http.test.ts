@@ -20,8 +20,8 @@ function fetchReturning(res: Response): typeof fetch {
 }
 
 function clientWith(fetchImpl: typeof fetch): Client {
-  // graphId is required under omnigraph-server 0.7.0 (cluster-only): without
-  // it the SDK throws ConfigurationError before reaching `fetchImpl`.
+  // graphId is required under omnigraph-server 0.7.0 (cluster-only): without it
+  // the facade's `requireGraph` guard throws before reaching `fetchImpl`.
   return new Client({
     baseUrl: "http://omnigraph.test",
     graphId: "company",
