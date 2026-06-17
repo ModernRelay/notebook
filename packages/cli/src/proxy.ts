@@ -22,9 +22,23 @@ export function proxyOg(
   const headers: http.OutgoingHttpHeaders = { ...req.headers };
   headers.host = upstream.host;
   if (token) headers.authorization = `Bearer ${token}`;
-  // Strip hop-by-hop headers a browser may send that some upstreams reject.
-  delete headers.connection;
-  delete headers["proxy-connection"];
+  // Strip RFC 7230 §6.1 hop-by-hop headers (+ the non-standard proxy-connection)
+  // before forwarding — leaving transfer-encoding/upgrade/keep-alive in place can
+  // break request framing or confuse the upstream. (authorization is end-to-end
+  // and was just set above, so it survives.)
+  for (const hop of [
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+  ]) {
+    delete headers[hop];
+  }
 
   const upstreamReq = lib.request(
     {

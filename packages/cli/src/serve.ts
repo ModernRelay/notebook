@@ -138,15 +138,25 @@ function buildOpenUrl(port: number, conn: Connection): string {
 }
 
 function sendFile(res: http.ServerResponse, file: string, ext: string): void {
-  res.writeHead(200, {
-    "content-type": MIME[ext.toLowerCase()] ?? "application/octet-stream",
+  const stream = createReadStream(file);
+  // Commit the 200 only once the file is confirmed readable (`open`). On a read
+  // error before that — missing file, permissions, or a TOCTOU after the
+  // existsSync check — headers aren't sent yet, so we can still return a real
+  // 404 instead of a 200 with a blank body.
+  stream.once("open", () => {
+    res.writeHead(200, {
+      "content-type": MIME[ext.toLowerCase()] ?? "application/octet-stream",
+    });
+    stream.pipe(res);
   });
-  createReadStream(file)
-    .on("error", () => {
-      if (!res.headersSent) res.writeHead(404);
+  stream.once("error", () => {
+    if (res.headersSent) {
       res.end();
-    })
-    .pipe(res);
+    } else {
+      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      res.end("404 Not Found");
+    }
+  });
 }
 
 /** Join a URL path under root, rejecting traversal outside root. */
@@ -164,7 +174,14 @@ function openBrowser(url: string): void {
         ? ["cmd", ["/c", "start", "", url]]
         : ["xdg-open", [url]];
   try {
-    spawn(cmd, args as string[], { stdio: "ignore", detached: true }).unref();
+    const child = spawn(cmd, args as string[], {
+      stdio: "ignore",
+      detached: true,
+    });
+    // A missing launcher (e.g. headless host without xdg-open) surfaces as an
+    // async 'error' event, not a throw — swallow it so `view` keeps serving.
+    child.on("error", () => {});
+    child.unref();
   } catch {
     /* best effort — the URL is printed regardless */
   }

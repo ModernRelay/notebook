@@ -73,6 +73,9 @@ importers:
       '@omnigraph/tui':
         specifier: workspace:*
         version: link:../tui
+      '@omnigraph/web':
+        specifier: workspace:*
+        version: link:../web
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.14)(typescript@6.0.3)(yaml@2.8.4)

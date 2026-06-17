@@ -37,6 +37,7 @@
     "@omnigraph/notebook-spec": "workspace:*",
     "@omnigraph/runtime": "workspace:*",
     "@omnigraph/tui": "workspace:*",
+    "@omnigraph/web": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3"
   },

@@ -29,8 +29,12 @@ export async function renderCommand(argv: string[]): Promise<number> {
     );
     return 2;
   }
+  // A non-numeric --timeout would become NaN → setTimeout(NaN) fires immediately;
+  // fall back to the default unless it parses to a positive number.
+  const parsedTimeout =
+    typeof values.timeout === "string" ? Number(values.timeout) : Number.NaN;
   const timeoutMs =
-    typeof values.timeout === "string" ? Number(values.timeout) : 30_000;
+    Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 30_000;
 
   const loaded = loadNotebook(notebookPath);
   const { source } = buildSource(loaded, sourceOptionsFrom(values));
