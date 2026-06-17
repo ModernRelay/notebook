@@ -32,7 +32,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { SearchIcon } from "lucide-react";
-import { CommandPalette, type CommandAction } from "./components/CommandPalette.js";
+import {
+  CommandPalette,
+  type CommandSection,
+} from "./components/CommandPalette.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -132,25 +135,30 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     snapshot.status === "ready" ? snapshot.cells.map((c) => c.cell) : config.notebook.cells
   ).map((c) => ({ id: c.id }));
 
-  // ⌘K command palette: jump to any cell + a couple of global actions.
-  const commands: CommandAction[] = [
-    ...navCells.map((c) => ({
-      id: `cell:${c.id}`,
-      label: humanizeCellId(c.id),
-      hint: "Cell",
-      run: () => goToCell(c.id),
-    })),
+  // ⌘K command palette: grouped sections — jump to any cell, plus global actions.
+  const commandSections: CommandSection[] = [
     {
-      id: "action:toggle-theme",
-      label: "Toggle light / dark theme",
-      hint: "Theme",
-      run: () => document.documentElement.classList.toggle("dark"),
+      value: "Cells",
+      items: navCells.map((c) => ({
+        value: `cell:${c.id}`,
+        label: humanizeCellId(c.id),
+        run: () => goToCell(c.id),
+      })),
     },
     {
-      id: "action:scroll-top",
-      label: "Scroll to top",
-      hint: "Action",
-      run: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+      value: "Actions",
+      items: [
+        {
+          value: "action:toggle-theme",
+          label: "Toggle light / dark theme",
+          run: () => document.documentElement.classList.toggle("dark"),
+        },
+        {
+          value: "action:scroll-top",
+          label: "Scroll to top",
+          run: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+        },
+      ],
     },
   ];
 
@@ -222,7 +230,11 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
           />
         )}
       </Shell>
-      <CommandPalette open={cmdOpen} setOpen={setCmdOpen} commands={commands} />
+      <CommandPalette
+        open={cmdOpen}
+        setOpen={setCmdOpen}
+        sections={commandSections}
+      />
     </JSONUIProvider>
   );
 }
