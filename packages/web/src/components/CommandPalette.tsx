@@ -1,6 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon, CornerDownLeftIcon } from "lucide-react";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
-import { Fragment, useEffect } from "react";
+import { Fragment } from "react";
 
 import {
   Command,
@@ -19,12 +19,14 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { type Chord, formatChord } from "@/lib/hotkeys";
 
 /** A pickable row. `label` is what Base UI fuzzy-filters on; `run` fires on pick. */
 export interface CommandAction {
   value: string;
   label: string;
-  shortcut?: string;
+  /** Optional shortcut — its badge and global binding come from this one chord. */
+  chord?: Chord;
   run: () => void;
 }
 
@@ -35,11 +37,12 @@ export interface CommandSection {
 }
 
 /**
- * ⌘K / Ctrl+K command palette, composed with the full COSS Command kit:
- * grouped sections (CommandGroup/Label/Collection) inside a nested CommandPanel,
- * with a CommandFooter of Kbd hints. Built on Base UI Autocomplete — it groups
- * and fuzzy-filters `sections` by each row's `label`, and a row runs its action
- * onClick (Enter activates the highlighted row).
+ * ⌘K command palette, composed with the full COSS Command kit: grouped sections
+ * (CommandGroup/Label/Collection) inside a nested CommandPanel, with a
+ * CommandFooter of Kbd hints. Built on Base UI Autocomplete — it groups and
+ * fuzzy-filters `sections` by each row's `label`, and a row runs its action
+ * onClick (Enter activates the highlighted row). Key bindings (incl. ⌘K) live
+ * in the host via `useHotkeys`; this component is presentational.
  */
 export function CommandPalette({
   open,
@@ -50,17 +53,6 @@ export function CommandPalette({
   setOpen: Dispatch<SetStateAction<boolean>>;
   sections: CommandSection[];
 }): ReactElement {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [setOpen]);
-
   const pick = (action: CommandAction): void => {
     setOpen(false);
     // Let the dialog close before we scroll / mutate the DOM.
@@ -93,9 +85,9 @@ export function CommandPalette({
                               <span className="flex-1 truncate">
                                 {action.label}
                               </span>
-                              {action.shortcut ? (
+                              {action.chord ? (
                                 <CommandShortcut>
-                                  {action.shortcut}
+                                  {formatChord(action.chord)}
                                 </CommandShortcut>
                               ) : null}
                             </CommandItem>

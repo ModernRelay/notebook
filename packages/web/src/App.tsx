@@ -36,6 +36,7 @@ import {
   CommandPalette,
   type CommandSection,
 } from "./components/CommandPalette.js";
+import { useHotkeys, type Hotkey } from "./lib/hotkeys.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -135,13 +136,16 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     snapshot.status === "ready" ? snapshot.cells.map((c) => c.cell) : config.notebook.cells
   ).map((c) => ({ id: c.id }));
 
-  // ⌘K command palette: grouped sections — jump to any cell, plus global actions.
+  // ⌘K command palette: grouped sections — jump to any cell, plus global
+  // actions. Each row's `chord` is the single source for both its badge and its
+  // global binding (wired by useHotkeys below). The first nine cells get ⌥1–⌥9.
   const commandSections: CommandSection[] = [
     {
       value: "Cells",
-      items: navCells.map((c) => ({
+      items: navCells.map((c, i) => ({
         value: `cell:${c.id}`,
         label: humanizeCellId(c.id),
+        chord: i < 9 ? { alt: true, code: `Digit${i + 1}` } : undefined,
         run: () => goToCell(c.id),
       })),
     },
@@ -151,16 +155,28 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
         {
           value: "action:toggle-theme",
           label: "Toggle light / dark theme",
-          run: () => document.documentElement.classList.toggle("dark"),
+          chord: { meta: true, code: "KeyD" },
+          run: toggleTheme,
         },
         {
           value: "action:scroll-top",
           label: "Scroll to top",
-          run: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+          chord: { meta: true, code: "ArrowUp" },
+          run: scrollToTop,
         },
       ],
     },
   ];
+
+  // One listener for every shortcut: ⌘K toggles the palette, plus each action's
+  // own chord (defined once on the action, reused for badge + binding).
+  const hotkeys: Hotkey[] = [
+    { chord: { meta: true, code: "KeyK" }, run: () => setCmdOpen((o) => !o) },
+    ...commandSections
+      .flatMap((section) => section.items)
+      .flatMap((item) => (item.chord ? [{ chord: item.chord, run: item.run }] : [])),
+  ];
+  useHotkeys(hotkeys);
 
   return (
     <JSONUIProvider
@@ -302,6 +318,14 @@ function goToCell(id: string): void {
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
   history.replaceState(null, "", `#${id}`);
+}
+
+function toggleTheme(): void {
+  document.documentElement.classList.toggle("dark");
+}
+
+function scrollToTop(): void {
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
