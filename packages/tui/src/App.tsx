@@ -229,6 +229,7 @@ function ActiveCellView({
             · {cell.result.row_count} row(s) · {cell.durationMs}ms
           </Text>
         )}
+        {cell.pending && <Text color="cyan"> · updating…</Text>}
       </Box>
 
       {/* Inline controls (filter Selects, Toggles, action Buttons) — render

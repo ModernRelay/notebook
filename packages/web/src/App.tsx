@@ -10,8 +10,27 @@ import { webRegistry } from "./registry.js";
 import {
   classifyMutationError,
   type ClassifiedError,
+  type ErrorKind,
 } from "./error-classifier.js";
 import { buildConfig, type AppConfig } from "./config.js";
+
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -44,16 +63,19 @@ export function App(): React.ReactElement {
 
   if (configStatus.kind === "loading") {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <Shell>
         <LoadingSkeleton cellTitles={["loading"]} />
-      </main>
+      </Shell>
     );
   }
   if (configStatus.kind === "fatal") {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <FatalPanel title="Failed to load notebook" message={configStatus.message} />
-      </main>
+      <Shell>
+        <FatalPanel
+          title="Failed to load notebook"
+          message={configStatus.message}
+        />
+      </Shell>
     );
   }
   return <RuntimeApp config={configStatus.config} />;
@@ -66,8 +88,9 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() =>
     runtime.getSnapshot(),
   );
-  const [dismissedMutationError, setDismissedMutationError] =
-    useState<string | null>(null);
+  const [dismissedMutationError, setDismissedMutationError] = useState<
+    string | null
+  >(null);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
@@ -87,7 +110,9 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
   );
 
   useEffect(() => {
-    const unsubscribe = runtime.subscribe(() => setSnapshot(runtime.getSnapshot()));
+    const unsubscribe = runtime.subscribe(() =>
+      setSnapshot(runtime.getSnapshot()),
+    );
     return () => {
       unsubscribe();
       runtime.dispose();
@@ -100,6 +125,10 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       ? classifyMutationError(snapshot.mutationError)
       : null;
 
+  const navCells = (
+    snapshot.status === "ready" ? snapshot.cells.map((c) => c.cell) : config.notebook.cells
+  ).map((c) => ({ id: c.id }));
+
   return (
     <JSONUIProvider
       registry={webRegistry}
@@ -107,28 +136,29 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       onStateChange={handleStateChange}
       handlers={handlers}
     >
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <header className="mb-8 flex items-baseline justify-between border-b border-zinc-800 pb-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
-              {config.notebook.title}
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {config.label}
-              {" · "}
-              {config.notebook.cells.length} cell
-              {config.notebook.cells.length === 1 ? "" : "s"}
-            </p>
+      <Shell
+        nav={<Sidebar cells={navCells} />}
+        header={
+          <div className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
+            <div className="min-w-0">
+              <h1 className="truncate font-heading text-2xl font-semibold tracking-tight text-foreground">
+                {config.notebook.title}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {config.label}
+                {" · "}
+                {config.notebook.cells.length} cell
+                {config.notebook.cells.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 font-mono uppercase">
+              {config.mode}
+            </Badge>
           </div>
-          <span className="rounded-full bg-green-900/60 px-3 py-1 font-mono text-xs uppercase tracking-wide text-green-300">
-            {config.mode}
-          </span>
-        </header>
-
+        }
+      >
         {snapshot.status === "loading" && (
-          <LoadingSkeleton
-            cellTitles={config.notebook.cells.map((c) => c.id)}
-          />
+          <LoadingSkeleton cellTitles={config.notebook.cells.map((c) => c.id)} />
         )}
         {snapshot.status === "fatal" && (
           <FatalPanel
@@ -150,8 +180,57 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
             onDismiss={() => setDismissedMutationError(mutationError.raw)}
           />
         )}
-      </main>
+      </Shell>
     </JSONUIProvider>
+  );
+}
+
+/** App shell: centered column with an optional left cell-nav and header. */
+function Shell({
+  children,
+  nav,
+  header,
+}: {
+  children: React.ReactNode;
+  nav?: React.ReactNode;
+  header?: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="min-h-screen">
+      <div className="mx-auto flex max-w-6xl gap-8 px-6 py-10">
+        {nav}
+        <main className="min-w-0 flex-1">
+          {header}
+          <div className="mt-8">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({
+  cells,
+}: {
+  cells: Array<{ id: string }>;
+}): React.ReactElement {
+  return (
+    <nav className="sticky top-10 hidden h-fit w-52 shrink-0 lg:block">
+      <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Cells
+      </p>
+      <ul className="space-y-0.5">
+        {cells.map((c) => (
+          <li key={c.id}>
+            <a
+              href={`#${c.id}`}
+              className="block truncate rounded-md px-3 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              {humanizeCellId(c.id)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -169,44 +248,82 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
     cell.cell.lens === "Toggle" ||
     cell.cell.lens === "Select";
 
+  // Re-querying (filter change / mutation re-run) keeps the previous spec
+  // visible; we dim the *lens output* and show an "updating…" cue, while the
+  // inline filter controls stay crisp so the user can keep interacting.
+  const dimContent = cell.pending && cell.spec !== null;
+
   return (
-    <section
+    <Card
       id={cell.cell.id}
-      className={
-        "rounded-lg border p-5 " +
-        (isControl
-          ? "border-zinc-700 bg-zinc-800/40"
-          : "border-zinc-800 bg-zinc-900/40")
-      }
+      className={cn("scroll-mt-10", isControl && "bg-card/60")}
     >
-      <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-medium text-zinc-100">
+      <CardHeader>
+        <CardTitle className="text-base">
           {humanizeCellId(cell.cell.id)}
-        </h2>
-        {cell.error === null && cell.result !== null && (
-          <span className="font-mono text-xs text-zinc-500">
-            {cell.result.row_count} row{cell.result.row_count === 1 ? "" : "s"}
-            {" · "}
-            {cell.durationMs}ms
-          </span>
+        </CardTitle>
+        {cell.pending ? (
+          <CardAction>
+            <UpdatingIndicator />
+          </CardAction>
+        ) : (
+          cell.error === null &&
+          cell.result !== null && (
+            <CardAction>
+              <Badge variant="outline" size="sm" className="font-mono">
+                {cell.result.row_count} row
+                {cell.result.row_count === 1 ? "" : "s"}
+                {" · "}
+                {cell.durationMs}ms
+              </Badge>
+            </CardAction>
+          )
         )}
-      </header>
-      {cell.controlSpecs.length > 0 && (
-        <div className="mb-3 space-y-2">
-          {cell.controlSpecs.map((spec) => (
-            <Renderer key={spec.root} spec={spec} registry={webRegistry} />
-          ))}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {cell.controlSpecs.length > 0 && (
+          <div className="space-y-2">
+            {cell.controlSpecs.map((spec) => (
+              <Renderer key={spec.root} spec={spec} registry={webRegistry} />
+            ))}
+          </div>
+        )}
+        <div
+          className={cn("transition-opacity", dimContent && "opacity-50")}
+          aria-busy={cell.pending || undefined}
+        >
+          {cell.error !== null && (
+            <Alert variant="error">
+              <AlertDescription className="font-mono text-xs">
+                {cell.error.message}
+              </AlertDescription>
+            </Alert>
+          )}
+          {cell.error === null && cell.spec !== null && (
+            <Renderer spec={cell.spec} registry={webRegistry} />
+          )}
+          {cell.error === null && cell.spec === null && cell.pending && (
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          )}
         </div>
-      )}
-      {cell.error !== null && (
-        <p className="rounded bg-red-900/40 p-3 font-mono text-xs text-red-200">
-          {cell.error.message}
-        </p>
-      )}
-      {cell.error === null && cell.spec !== null && (
-        <Renderer spec={cell.spec} registry={webRegistry} />
-      )}
-    </section>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UpdatingIndicator(): React.ReactElement {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+      aria-live="polite"
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+      updating…
+    </span>
   );
 }
 
@@ -218,22 +335,21 @@ function LoadingSkeleton({
   return (
     <div className="space-y-6">
       {cellTitles.map((id) => (
-        <section
-          key={id}
-          className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5"
-        >
-          <header className="mb-4 flex items-baseline justify-between gap-3">
-            <h2 className="text-base font-medium text-zinc-400">
+        <Card key={id}>
+          <CardHeader>
+            <CardTitle className="text-base text-muted-foreground">
               {humanizeCellId(id)}
-            </h2>
-            <SkeletonBar w="w-20" />
-          </header>
-          <div className="space-y-2">
-            <SkeletonBar w="w-full" />
-            <SkeletonBar w="w-5/6" />
-            <SkeletonBar w="w-2/3" />
-          </div>
-        </section>
+            </CardTitle>
+            <CardAction>
+              <Skeleton className="h-4 w-20" />
+            </CardAction>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
+            <Skeleton className="h-3 w-2/3" />
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -247,29 +363,22 @@ function FatalPanel({
   message: string;
 }): React.ReactElement {
   return (
-    <div className="rounded-md border border-red-800 bg-red-950/40 p-4">
-      <p className="font-mono uppercase tracking-wide text-red-300">
-        {title}
-      </p>
-      <p className="mt-1 text-red-200">{message}</p>
-    </div>
+    <Alert variant="error">
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
   );
 }
 
-function SkeletonBar({ w }: { w: string }): React.ReactElement {
-  // Two-tone pulse — the bg gives the bar a baseline, animate-pulse
-  // dims it cyclically. h-3 default; callers can include h-* in `w`.
-  const hasHeight = /\bh-/.test(w);
-  return (
-    <span
-      className={
-        "inline-block animate-pulse rounded bg-zinc-800 " +
-        (hasHeight ? "" : "h-3 ") +
-        w
-      }
-    />
-  );
-}
+const ALERT_VARIANT: Record<ErrorKind, "error" | "warning" | "info" | "default"> =
+  {
+    conflict: "warning",
+    permission: "error",
+    validation: "warning",
+    network: "default",
+    engine: "error",
+    unknown: "error",
+  };
 
 function ErrorPanel({
   error,
@@ -278,57 +387,39 @@ function ErrorPanel({
   error: ClassifiedError;
   onDismiss: () => void;
 }): React.ReactElement {
-  const tone =
-    error.kind === "conflict"
-      ? "border-amber-700 bg-amber-950/40"
-      : error.kind === "permission"
-        ? "border-red-700 bg-red-950/40"
-        : error.kind === "network"
-          ? "border-zinc-700 bg-zinc-900/60"
-          : "border-red-800 bg-red-950/40";
-  const titleTone =
-    error.kind === "conflict"
-      ? "text-amber-200"
-      : error.kind === "network"
-        ? "text-zinc-300"
-        : "text-red-200";
   return (
-    <aside
-      role="alert"
-      className={"mt-6 rounded-md border p-4 text-sm " + tone}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p
-            className={
-              "mb-1 font-mono text-xs uppercase tracking-wide " + titleTone
-            }
-          >
-            {error.kind}
-          </p>
-          <p className={"font-medium " + titleTone}>{error.title}</p>
-          <p className="mt-1 text-zinc-300">{error.body}</p>
-          {error.suggestion && (
-            <p className="mt-2 text-zinc-400">{error.suggestion}</p>
-          )}
-          <details className="mt-3 text-xs text-zinc-500">
-            <summary className="cursor-pointer hover:text-zinc-300">
-              raw error
-            </summary>
-            <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 font-mono text-zinc-400">
-              {error.raw}
-            </pre>
-          </details>
-        </div>
-        <button
+    <Alert variant={ALERT_VARIANT[error.kind]} className="mt-6">
+      <AlertTitle>
+        <span className="mr-2 font-mono text-xs uppercase tracking-wide text-muted-foreground">
+          {error.kind}
+        </span>
+        {error.title}
+      </AlertTitle>
+      <AlertDescription>
+        <span>{error.body}</span>
+        {error.suggestion && (
+          <span className="text-muted-foreground">{error.suggestion}</span>
+        )}
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer hover:text-foreground">
+            raw error
+          </summary>
+          <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-background/60 p-2 font-mono">
+            {error.raw}
+          </pre>
+        </details>
+      </AlertDescription>
+      <AlertAction>
+        <Button
           type="button"
-          onClick={onDismiss}
+          variant="ghost"
+          size="icon-sm"
           aria-label="dismiss"
-          className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+          onClick={onDismiss}
         >
           ✕
-        </button>
-      </div>
-    </aside>
+        </Button>
+      </AlertAction>
+    </Alert>
   );
 }
