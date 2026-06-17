@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "build": "pnpm --filter @omnigraph/web build && tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@json-render/core": "^0.19.0",

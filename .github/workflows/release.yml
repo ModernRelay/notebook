@@ -1,0 +1,35 @@
+name: release
+
+# Mirror of ModernRelay/omnigraph-ts: bump packages/cli's version, push a
+# matching `vX.Y.Z` tag, and this publishes @modernrelay/notebook to npm.
+# Requires an `NPM_TOKEN` repo secret with publish rights to the @modernrelay scope.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+      # Build the whole workspace so the CLI's bundle can resolve every
+      # @omnigraph/* lib's dist + the web SPA it copies into web-dist/.
+      - run: pnpm -r build
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - name: Publish @modernrelay/notebook
+        working-directory: packages/cli
+        run: pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
