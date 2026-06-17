@@ -1,4 +1,4 @@
-import type { NotebookRuntime, RuntimeSnapshot } from "@omnigraph/runtime";
+import type { NotebookRuntime, RuntimeSnapshot } from "@modernrelay/notebook-runtime";
 
 /**
  * Resolve once the runtime snapshot satisfies `predicate`, or reject on timeout.

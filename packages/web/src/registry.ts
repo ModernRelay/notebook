@@ -1,7 +1,7 @@
 import { defineCatalog } from "@json-render/core";
 import { schema, defineRegistry } from "@json-render/react";
-import { lensActions, lensComponents } from "@omnigraph/catalog";
-import { setAtPointer } from "@omnigraph/runtime";
+import { lensActions, lensComponents } from "@modernrelay/notebook-catalog";
+import { setAtPointer } from "@modernrelay/notebook-runtime";
 import { Table } from "./components/Table.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";

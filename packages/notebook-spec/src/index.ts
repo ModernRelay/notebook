@@ -62,7 +62,7 @@ export interface MutationResult {
 // ── Fixture-mode query DSL ────────────────────────────────────────────────
 // Used when a notebook declares a top-level `fixture` path. The cell's
 // `query.fixture` carries a structured query that the in-memory runner
-// evaluates against the loaded JSON graph. See @omnigraph/fixture.
+// evaluates against the loaded JSON graph. See @modernrelay/notebook-fixture.
 
 const FixtureNodesQuerySchema = z.object({
   kind: z.literal("nodes"),

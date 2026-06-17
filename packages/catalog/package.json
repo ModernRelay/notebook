@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/catalog",
+  "name": "@modernrelay/notebook-catalog",
   "version": "0.0.1",
   "private": true,
   "description": "Renderer-agnostic lens catalog (Table, Path, Subgraph) — Zod author-prop schemas + descriptions + spec assembler.",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@json-render/core": "^0.19.0",
-    "@omnigraph/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

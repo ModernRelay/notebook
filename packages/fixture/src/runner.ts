@@ -3,7 +3,7 @@ import type {
   FixtureNodesQuery,
   FixturePathQuery,
   FixtureEgoQuery,
-} from "@omnigraph/notebook-spec";
+} from "@modernrelay/notebook-spec";
 import type { Fixture, FixtureNode, FixtureEdge } from "./validator.js";
 
 export type ResultRow = Record<string, unknown>;

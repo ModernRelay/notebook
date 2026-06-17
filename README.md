@@ -37,7 +37,7 @@ mr-notebook render   nb.yaml           # headless run → cell results as JSON
 pnpm install
 pnpm -r build
 pnpm tui examples/company.notebook.yaml          # terminal
-pnpm --filter @omnigraph/web dev                 # browser at 127.0.0.1:5173
+pnpm --filter @modernrelay/notebook-web dev                 # browser at 127.0.0.1:5173
 pnpm --filter @modernrelay/notebook build        # bundle the CLI (tsup) + web-dist
 ```
 
@@ -47,13 +47,13 @@ The fixture demos render the same cells against the in-memory `examples/fixtures
 
 | Package | Purpose |
 |---|---|
-| `@omnigraph/notebook-spec` | Zod schemas for the notebook YAML + structured query DSL. |
-| `@omnigraph/fixture` | In-memory loader + nodes/path/ego query runner. |
-| `@omnigraph/catalog` | Shared `lensComponents` map + `assembleLensSpec` helper. |
-| `@omnigraph/runtime` | Notebook runtime for source capabilities, execution, state, actions, and mutations. |
-| `@omnigraph/client` | HTTP client + live `ServerSource` adapter for omnigraph-server. |
-| `@omnigraph/tui` | Ink renderer + the `omnigraph-tui` binary. |
-| `@omnigraph/web` | Vite + React + Tailwind v4 SPA. |
+| `@modernrelay/notebook-spec` | Zod schemas for the notebook YAML + structured query DSL. |
+| `@modernrelay/notebook-fixture` | In-memory loader + nodes/path/ego query runner. |
+| `@modernrelay/notebook-catalog` | Shared `lensComponents` map + `assembleLensSpec` helper. |
+| `@modernrelay/notebook-runtime` | Notebook runtime for source capabilities, execution, state, actions, and mutations. |
+| `@modernrelay/notebook-client` | HTTP client + live `ServerSource` adapter for omnigraph-server. |
+| `@modernrelay/notebook-tui` | Ink renderer + the `omnigraph-tui` binary. |
+| `@modernrelay/notebook-web` | Vite + React + Tailwind v4 SPA. |
 | `@modernrelay/notebook` (`packages/cli`) | The published CLI — bundles the libs + ships the web SPA; `view`/`tui`/`validate`/`render`/`catalog`/`schema`. |
 
 ## Status

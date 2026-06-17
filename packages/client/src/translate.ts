@@ -1,6 +1,6 @@
 /**
  * Pure translators from the fixture-DSL (the same DSL that powers
- * `@omnigraph/fixture`'s in-memory runner) into the parameterized `.gq`
+ * `@modernrelay/notebook-fixture`'s in-memory runner) into the parameterized `.gq`
  * source that omnigraph-server speaks.
  *
  * Output shape for every translator:
@@ -20,7 +20,7 @@ import type {
   FixturePathQuery,
   FixtureQuery,
   MutationParams,
-} from "@omnigraph/notebook-spec";
+} from "@modernrelay/notebook-spec";
 
 export interface TranslatedQuery {
   query_source: string;

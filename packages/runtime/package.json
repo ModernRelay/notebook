@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/runtime",
+  "name": "@modernrelay/notebook-runtime",
   "version": "0.0.1",
   "private": true,
   "description": "Notebook runtime for execution, state, action dispatch, source capabilities, and mutation lifecycle.",
@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "@json-render/core": "^0.19.0",
-    "@omnigraph/catalog": "workspace:*",
-    "@omnigraph/notebook-spec": "workspace:*"
+    "@modernrelay/notebook-catalog": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.5"

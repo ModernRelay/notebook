@@ -1,6 +1,6 @@
 import React from "react";
 import { useBoundProp } from "@json-render/react";
-import type { SelectRuntimeProps } from "@omnigraph/catalog";
+import type { SelectRuntimeProps } from "@modernrelay/notebook-catalog";
 import {
   Select as SelectRoot,
   SelectItem,

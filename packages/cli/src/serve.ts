@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseNotebook } from "@omnigraph/notebook-spec";
+import { parseNotebook } from "@modernrelay/notebook-spec";
 
 import { proxyOg } from "./proxy.js";
 import type { Connection } from "./source.js";
@@ -35,7 +35,7 @@ function resolveWebDist(): string {
     if (existsSync(join(candidate, "index.html"))) return candidate;
   }
   throw new Error(
-    "web build not found — run `pnpm --filter @omnigraph/web build` first",
+    "web build not found — run `pnpm --filter @modernrelay/notebook-web build` first",
   );
 }
 

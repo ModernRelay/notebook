@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/notebook-spec",
+  "name": "@modernrelay/notebook-spec",
   "version": "0.0.1",
   "private": true,
   "description": "Zod 4 schemas for the OmniGraph notebook YAML wire format (frozen v1).",

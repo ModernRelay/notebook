@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Notebook } from "@omnigraph/notebook-spec";
+import type { Notebook } from "@modernrelay/notebook-spec";
 import {
   createNotebookRuntime,
   type ExecutionContext,

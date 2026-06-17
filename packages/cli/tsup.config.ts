@@ -2,8 +2,8 @@ import { defineConfig } from "tsup";
 
 // Real npm packages — kept external so they resolve from the CLI's own
 // node_modules at install time (a single shared instance; bundling react/ink
-// would risk "invalid hook call"). Everything `@omnigraph/*` is a private
-// workspace lib and is bundled in (noExternal) since it is never published.
+// would risk "invalid hook call"). Everything `@modernrelay/notebook-*` is a
+// private workspace lib and is bundled in (noExternal) since it is never published.
 const EXTERNAL = [
   "@modernrelay/omnigraph",
   "@json-render/core",
@@ -21,7 +21,7 @@ export default defineConfig({
   platform: "node",
   bundle: true,
   external: EXTERNAL,
-  noExternal: [/^@omnigraph\//],
+  noExternal: [/^@modernrelay\/notebook-/],
   banner: { js: "#!/usr/bin/env node" },
   clean: true,
   dts: false,

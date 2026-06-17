@@ -4,7 +4,7 @@ import {
   createNotebookRuntime,
   type CellExecution,
   type RuntimeSnapshot,
-} from "@omnigraph/runtime";
+} from "@modernrelay/notebook-runtime";
 
 import { webRegistry } from "./registry.js";
 import {

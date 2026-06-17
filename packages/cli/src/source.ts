@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { Client, ServerSource } from "@omnigraph/client";
-import { FixtureSource } from "@omnigraph/fixture";
-import { loadFixture } from "@omnigraph/fixture/node";
-import { parseNotebook, type Notebook } from "@omnigraph/notebook-spec";
-import type { Source } from "@omnigraph/runtime";
+import { Client, ServerSource } from "@modernrelay/notebook-client";
+import { FixtureSource } from "@modernrelay/notebook-fixture";
+import { loadFixture } from "@modernrelay/notebook-fixture/node";
+import { parseNotebook, type Notebook } from "@modernrelay/notebook-spec";
+import type { Source } from "@modernrelay/notebook-runtime";
 
 export interface SourceOptions {
   server?: string;

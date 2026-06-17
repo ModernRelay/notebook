@@ -1,5 +1,5 @@
 import React from "react";
-import type { TableRuntimeProps } from "@omnigraph/catalog";
+import type { TableRuntimeProps } from "@modernrelay/notebook-catalog";
 import {
   Table as CossTable,
   TableBody,

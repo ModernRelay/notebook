@@ -17,7 +17,7 @@
     "notebook.schema.json"
   ],
   "scripts": {
-    "build": "pnpm --filter @omnigraph/web build && tsup",
+    "build": "pnpm --filter @modernrelay/notebook-web build && tsup",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
@@ -31,13 +31,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@omnigraph/catalog": "workspace:*",
-    "@omnigraph/client": "workspace:*",
-    "@omnigraph/fixture": "workspace:*",
-    "@omnigraph/notebook-spec": "workspace:*",
-    "@omnigraph/runtime": "workspace:*",
-    "@omnigraph/tui": "workspace:*",
-    "@omnigraph/web": "workspace:*",
+    "@modernrelay/notebook-catalog": "workspace:*",
+    "@modernrelay/notebook-client": "workspace:*",
+    "@modernrelay/notebook-fixture": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-runtime": "workspace:*",
+    "@modernrelay/notebook-tui": "workspace:*",
+    "@modernrelay/notebook-web": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3"
   },

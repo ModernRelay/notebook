@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Client, QueryInput, MutateInput } from "./http.js";
 import { ServerSource } from "./source.js";
-import type { ExecutionContext, MutationContext } from "@omnigraph/runtime";
+import type { ExecutionContext, MutationContext } from "@modernrelay/notebook-runtime";
 
 const CTX: ExecutionContext = {
   cellId: "cell",

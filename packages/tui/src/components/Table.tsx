@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { TableRuntimeProps } from "@omnigraph/catalog";
+import type { TableRuntimeProps } from "@modernrelay/notebook-catalog";
 
 interface ComponentCtx<P> {
   props: P;

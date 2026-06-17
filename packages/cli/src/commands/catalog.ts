@@ -5,7 +5,7 @@ import {
   PathAuthorPropsSchema,
   SubgraphAuthorPropsSchema,
   TableAuthorPropsSchema,
-} from "@omnigraph/catalog";
+} from "@modernrelay/notebook-catalog";
 import type { ZodType } from "zod";
 import { z } from "zod";
 

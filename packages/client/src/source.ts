@@ -13,8 +13,8 @@ import type {
   ReadRequest,
   Source,
   SourceCapabilities,
-} from "@omnigraph/runtime";
-import type { FixtureEgoQuery, MutationResult } from "@omnigraph/notebook-spec";
+} from "@modernrelay/notebook-runtime";
+import type { FixtureEgoQuery, MutationResult } from "@modernrelay/notebook-spec";
 import { Client, type ChangeOutput } from "./http.js";
 import {
   edgeToPredicate,

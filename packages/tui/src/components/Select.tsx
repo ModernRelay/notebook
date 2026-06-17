@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useFocus, useInput } from "ink";
 import { useBoundProp } from "@json-render/ink";
-import type { SelectRuntimeProps } from "@omnigraph/catalog";
+import type { SelectRuntimeProps } from "@modernrelay/notebook-catalog";
 
 interface ComponentCtx<P> {
   props: P;

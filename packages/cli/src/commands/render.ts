@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 
-import { createNotebookRuntime } from "@omnigraph/runtime";
+import { createNotebookRuntime } from "@modernrelay/notebook-runtime";
 
 import { SOURCE_OPTIONS, sourceOptionsFrom } from "../args.js";
 import { buildSource, loadNotebook } from "../source.js";

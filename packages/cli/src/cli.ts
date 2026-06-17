@@ -23,7 +23,7 @@ Source flags (view/tui/validate/render):
 
 /** Lazy: only pulls in Ink/React (and its import-time stdin shim) for the TUI. */
 async function tuiCommand(argv: string[]): Promise<number> {
-  const { main } = await import("@omnigraph/tui");
+  const { main } = await import("@modernrelay/notebook-tui");
   // main is synchronous (returns void) today; await-wrapping means an async
   // variant would still surface startup errors through the dispatcher's .catch.
   await Promise.resolve(main(argv));
