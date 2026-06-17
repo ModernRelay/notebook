@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { SearchIcon } from "lucide-react";
+import { CommandPalette, type CommandAction } from "./components/CommandPalette.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -91,6 +93,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
   const [dismissedMutationError, setDismissedMutationError] = useState<
     string | null
   >(null);
+  const [cmdOpen, setCmdOpen] = useState(false);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
@@ -129,6 +132,28 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     snapshot.status === "ready" ? snapshot.cells.map((c) => c.cell) : config.notebook.cells
   ).map((c) => ({ id: c.id }));
 
+  // ⌘K command palette: jump to any cell + a couple of global actions.
+  const commands: CommandAction[] = [
+    ...navCells.map((c) => ({
+      id: `cell:${c.id}`,
+      label: humanizeCellId(c.id),
+      hint: "Cell",
+      run: () => goToCell(c.id),
+    })),
+    {
+      id: "action:toggle-theme",
+      label: "Toggle light / dark theme",
+      hint: "Theme",
+      run: () => document.documentElement.classList.toggle("dark"),
+    },
+    {
+      id: "action:scroll-top",
+      label: "Scroll to top",
+      hint: "Action",
+      run: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+    },
+  ];
+
   return (
     <JSONUIProvider
       registry={webRegistry}
@@ -139,7 +164,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       <Shell
         nav={<Sidebar cells={navCells} />}
         header={
-          <div className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
+          <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
             <div className="min-w-0">
               <h1 className="truncate font-heading text-2xl font-semibold tracking-tight text-foreground">
                 {config.notebook.title}
@@ -151,9 +176,25 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
                 {config.notebook.cells.length === 1 ? "" : "s"}
               </p>
             </div>
-            <Badge variant="outline" className="shrink-0 font-mono uppercase">
-              {config.mode}
-            </Badge>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCmdOpen(true)}
+                aria-label="Open command palette"
+                className="gap-2 text-muted-foreground"
+              >
+                <SearchIcon className="size-4" />
+                <span className="max-sm:hidden">Search</span>
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none">
+                  ⌘K
+                </kbd>
+              </Button>
+              <Badge variant="outline" className="font-mono uppercase">
+                {config.mode}
+              </Badge>
+            </div>
           </div>
         }
       >
@@ -181,6 +222,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
           />
         )}
       </Shell>
+      <CommandPalette open={cmdOpen} setOpen={setCmdOpen} commands={commands} />
     </JSONUIProvider>
   );
 }
@@ -240,6 +282,14 @@ function humanizeCellId(id: string): string {
   // on purpose so the title doesn't shout ("Recent Decisions").
   const spaced = id.replace(/[-_]+/g, " ").trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
+/** Smooth-scroll a cell Card into view (cells render with `id={cell.id}`). */
+function goToCell(id: string): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  history.replaceState(null, "", `#${id}`);
 }
 
 function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
