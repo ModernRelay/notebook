@@ -1,4 +1,4 @@
-# omnigraph-ui
+# @modernrelay/notebook
 
 Notebook UI for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each notebook cell is a typed *lens primitive* (Table, Path, Subgraph) rendered from a structured query — not a generic graph viewer.
 
