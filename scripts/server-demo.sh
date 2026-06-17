@@ -61,7 +61,7 @@ else
   cat > "${CLUSTER_DIR}/cluster.yaml" <<EOF
 version: 1
 metadata:
-  name: company-demo
+  name: ${GRAPH_ID}-demo
 state:
   backend: cluster
   lock: true

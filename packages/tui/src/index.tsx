@@ -96,8 +96,10 @@ export function main(argv: readonly string[]): void {
     process.env.OMNIGRAPH_TOKEN ??
     process.env.OMNIGRAPH_BEARER_TOKEN;
   // omnigraph-server 0.7.0+ is cluster-only; every read/write is graph-scoped.
+  // Precedence: explicit flag → environment → committed notebook (most-specific
+  // / most-ephemeral wins, matching how `token` resolves above).
   const graphId =
-    args.graph ?? notebook.graph ?? process.env.OMNIGRAPH_GRAPH_ID;
+    args.graph ?? process.env.OMNIGRAPH_GRAPH_ID ?? notebook.graph;
 
   let source: Source;
   let label: string;

@@ -470,11 +470,18 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     const cells = this.snapshot.cells.map((execution) => {
       const raw = this.rawResults.get(execution.cell.id);
       if (!raw || isControl(execution.cell)) return execution;
-      return this.buildDataCellExecution(
-        execution.cell,
-        raw,
-        execution.durationMs,
-      );
+      // Re-derive spec/result (e.g. an optimistic overlay) without disturbing
+      // the cell's load lifecycle — `pending` is owned by the read path
+      // (markCellPending → runCell), so a mutation-triggered rebuild must not
+      // clear an in-flight cell's "updating…" cue.
+      return {
+        ...this.buildDataCellExecution(
+          execution.cell,
+          raw,
+          execution.durationMs,
+        ),
+        pending: execution.pending,
+      };
     });
     this.snapshot = { ...this.snapshot, cells };
   }
