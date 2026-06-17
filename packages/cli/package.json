@@ -9,7 +9,6 @@
   },
   "bin": {
     "notebook": "./dist/cli.js",
-    "modernrelay-notebook": "./dist/cli.js",
     "mr-notebook": "./dist/cli.js"
   },
   "files": [

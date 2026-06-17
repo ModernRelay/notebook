@@ -15,6 +15,13 @@ npx @modernrelay/notebook view  my.notebook.yaml \
   --server https://graph.example.com --graph my-graph --token $TOK    # live cluster
 ```
 
+Or install it once and use the short **`notebook`** command (`mr-notebook` is an alias):
+
+```bash
+npm i -g @modernrelay/notebook
+notebook view my.notebook.yaml
+```
+
 `view` serves the prebuilt SPA locally and, in server mode, reverse-proxies the
 omnigraph-server with the bearer token injected server-side (the browser stays
 same-origin — omnigraph-server 0.7.0 sets no CORS headers, and the token never
@@ -24,8 +31,8 @@ reaches the page). Source flags (`--server/--graph/--token/--branch`) apply to
 
 ### Agent / scripting surface
 
-Use the same zero-install `npx` form (after `npm i -g @modernrelay/notebook`, the
-short `mr-notebook` / `modernrelay-notebook` bins are equivalent):
+Use the same zero-install `npx` form (or the short `notebook` command after a
+global install):
 
 ```bash
 npx @modernrelay/notebook schema                   # JSON Schema for the notebook YAML

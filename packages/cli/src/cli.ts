@@ -6,7 +6,7 @@ import { viewCommand } from "./commands/view.js";
 
 const HELP = `@modernrelay/notebook — run an omnigraph notebook anywhere
 
-Usage: mr-notebook <command> [args]
+Usage: notebook <command> [args]      (npx @modernrelay/notebook <command> …)
 
 Commands:
   view <nb.yaml>       Open the notebook in your browser (default)
