@@ -58,7 +58,11 @@ export async function serve(opts: ServeOptions): Promise<void> {
     if (!notebook.fixture) {
       throw new Error("fixture mode requires `fixture:` in the notebook");
     }
-    fixtureUrlPath = new URL(notebook.fixture, "http://x/notebook.yaml").pathname;
+    // Decode so it compares against the request's decoded path (a fixture name
+    // with e.g. a space arrives URL-encoded from the browser's fetch).
+    fixtureUrlPath = decodeURIComponent(
+      new URL(notebook.fixture, "http://x/notebook.yaml").pathname,
+    );
     fixtureFile = resolve(dirname(opts.notebookPath), notebook.fixture);
   }
 
@@ -68,7 +72,17 @@ export async function serve(opts: ServeOptions): Promise<void> {
       : undefined;
 
   const server = http.createServer((req, res) => {
-    const path = (req.url ?? "/").split("?")[0] ?? "/";
+    const rawPath = (req.url ?? "/").split("?")[0] ?? "/";
+    // Decode once, here. A malformed %-sequence (e.g. `/%ZZ`) must answer 400,
+    // not throw URIError out of the request handler and crash the server.
+    let path: string;
+    try {
+      path = decodeURIComponent(rawPath);
+    } catch {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end("400 Bad Request");
+      return;
+    }
 
     // 1. /og/* → BFF reverse proxy (token injected server-side).
     if (path === "/og" || path.startsWith("/og/")) {
@@ -159,9 +173,9 @@ function sendFile(res: http.ServerResponse, file: string, ext: string): void {
   });
 }
 
-/** Join a URL path under root, rejecting traversal outside root. */
+/** Join an already-decoded URL path under root, rejecting traversal outside root. */
 function safeJoin(root: string, urlPath: string): string | null {
-  const joined = normalize(join(root, decodeURIComponent(urlPath)));
+  const joined = normalize(join(root, urlPath));
   if (joined !== root && !joined.startsWith(root + sep)) return null;
   return joined;
 }

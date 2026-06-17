@@ -24,10 +24,23 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
       # Build the whole workspace so the CLI's bundle can resolve every
-      # @omnigraph/* lib's dist + the web SPA it copies into web-dist/.
+      # @modernrelay/notebook-* lib's dist + the web SPA it copies into web-dist/.
       - run: pnpm -r build
       - run: pnpm -r typecheck
       - run: pnpm -r test
+      # Fail before publishing if the pushed tag doesn't name the version in
+      # packages/cli — otherwise a `vX.Y.Z` tag would publish whatever version
+      # is in package.json under that tag's provenance.
+      - name: Verify tag matches packages/cli version
+        working-directory: packages/cli
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match packages/cli version ${PKG_VERSION}"
+            exit 1
+          fi
+          echo "publishing @modernrelay/notebook@${PKG_VERSION} (tag ${GITHUB_REF_NAME})"
       - name: Publish @modernrelay/notebook
         working-directory: packages/cli
         run: pnpm publish --no-git-checks --access public

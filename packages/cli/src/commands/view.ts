@@ -28,9 +28,20 @@ export async function viewCommand(argv: string[]): Promise<number> {
     return 2;
   }
 
+  let port = 4321;
+  if (typeof values.port === "string") {
+    const parsed = Number(values.port);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
+      process.stderr.write(
+        `invalid --port: ${values.port} (expected an integer 0–65535)\n`,
+      );
+      return 2;
+    }
+    port = parsed;
+  }
+
   const loaded = loadNotebook(notebookPath);
   const connection = resolveConnection(loaded, sourceOptionsFrom(values));
-  const port = typeof values.port === "string" ? Number(values.port) : 4321;
 
   await serve({
     notebookPath: loaded.notebookPath,
