@@ -44,6 +44,7 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 | `@omnigraph/client` | `ServerSource` + `translateFixtureQuery` / `translateMutation` (fixture DSL → `.gq`) + a `Client` facade over the `@modernrelay/omnigraph` SDK (`/query` + `/mutate`, graph-scoped). |
 | `@omnigraph/tui` | Ink renderer + CLI entry (`bin/omnigraph-tui.js`); host shell for terminal. |
 | `@omnigraph/web` | Vite + React + Tailwind renderer; host shell for browser. |
+| `@modernrelay/notebook` (`packages/cli`) | The published front-door CLI. Bundles every `@omnigraph/*` lib (tsup, `noExternal`) and ships the built web SPA in `web-dist/`. Subcommands: `view` (browser — static server + `/og` BFF proxy with server-side token injection, reusing `web/src/config.ts`'s URL-param contract), `tui` (calls `@omnigraph/tui` `main`), `validate`/`render`/`catalog`/`schema` (agent-DX, JSON out; schema via Zod 4 `z.toJSONSchema`). The workspace root is the private `notebook-workspace`; `@modernrelay/notebook` is the CLI, not the root. |
 
 ### Data flow per render
 

@@ -1,8 +1,8 @@
 {
-  "name": "@modernrelay/notebook",
+  "name": "notebook-workspace",
   "version": "0.0.1",
   "private": true,
-  "description": "@modernrelay/notebook — typed lens primitives over an omnigraph fixture or live cluster, rendered to terminal and web from one json-render catalog.",
+  "description": "Monorepo for @modernrelay/notebook — typed lens primitives over an omnigraph fixture or live cluster, rendered to terminal and web from one json-render catalog. The published CLI lives in packages/cli.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.30.3",
   "engines": {
