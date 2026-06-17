@@ -336,8 +336,9 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
 
   // Re-querying (filter change / mutation re-run) keeps the previous spec
   // visible; we dim the *lens output* and show an "updating…" cue, while the
-  // inline filter controls stay crisp so the user can keep interacting.
-  const dimContent = cell.pending && cell.spec !== null;
+  // inline filter controls stay crisp so the user can keep interacting. A
+  // failed re-read also keeps the stale spec (shown dimmed beneath the error).
+  const dimContent = (cell.pending || cell.error !== null) && cell.spec !== null;
 
   return (
     <Card
@@ -379,13 +380,13 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
           aria-busy={cell.pending || undefined}
         >
           {cell.error !== null && (
-            <Alert variant="error">
+            <Alert variant="error" className="mb-3">
               <AlertDescription className="font-mono text-xs">
                 {cell.error.message}
               </AlertDescription>
             </Alert>
           )}
-          {cell.error === null && cell.spec !== null && (
+          {cell.spec !== null && (
             <Renderer spec={cell.spec} registry={webRegistry} />
           )}
           {cell.error === null && cell.spec === null && cell.pending && (

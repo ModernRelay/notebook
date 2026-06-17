@@ -164,6 +164,57 @@ describe("createNotebookRuntime", () => {
     runtime.dispose();
   });
 
+  it("keeps the stale spec when a re-read fails (stale-while-revalidate)", async () => {
+    const notebook: Notebook = {
+      version: 1,
+      title: "T",
+      cells: [
+        {
+          id: "t",
+          lens: "Table",
+          query: {
+            fixture: {
+              kind: "nodes",
+              where: { type: "X", status: { $state: "/f" } },
+            },
+          },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
+    let calls = 0;
+    const runtime = createNotebookRuntime({
+      notebook,
+      source: fakeSource({
+        read: async (request) => {
+          calls += 1;
+          if (calls >= 2) throw new Error("re-read failed");
+          return {
+            query_name: request.cellId,
+            target: "main",
+            row_count: 1,
+            columns: ["x"],
+            rows: [{ x: 1 }],
+          };
+        },
+      }),
+    });
+    // Initial read succeeds → the cell has a spec.
+    const ready = await waitFor(runtime, (s) => s.cells[0]?.spec !== null);
+    expect(ready.cells[0]?.error).toBeNull();
+
+    // A filter change triggers a re-read that fails.
+    runtime.applyStateChanges([{ path: "/f", value: "open" }]);
+    const errored = await waitFor(runtime, (s) => s.cells[0]?.error !== null);
+
+    // Stale-while-revalidate: prior spec/result stay, error attached, not pending.
+    expect(errored.cells[0]?.error?.message).toBe("re-read failed");
+    expect(errored.cells[0]?.spec).not.toBeNull();
+    expect(errored.cells[0]?.result).not.toBeNull();
+    expect(errored.cells[0]?.pending).toBe(false);
+    runtime.dispose();
+  });
+
   it("stops before reads when compatibility validation fails", () => {
     const read = vi.fn(async () => ({
       query_name: "q",

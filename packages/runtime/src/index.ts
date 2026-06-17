@@ -430,9 +430,16 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       );
     } catch (err) {
       if (!this.isCurrentRun(cell.id, generation) || isAbortError(err)) return;
-      this.rawResults.delete(cell.id);
+      // Stale-while-revalidate on failure: keep the last good spec/result
+      // visible and attach the error, instead of wiping the cell to an empty
+      // error state. rawResults is left intact so the stale view stays coherent.
+      // First-load failures have no prior spec, so they fall back to empty.
+      const previous = this.snapshot.cells.find(
+        (existing) => existing.cell.id === cell.id,
+      );
       this.setCellExecution(cell.id, {
-        ...emptyCellExecution(cell),
+        ...(previous ?? emptyCellExecution(cell)),
+        pending: false,
         durationMs: Date.now() - start,
         error: { message: errorMessage(err) },
       });

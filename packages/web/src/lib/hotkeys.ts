@@ -61,30 +61,47 @@ function matchesChord(event: KeyboardEvent, chord: Chord): boolean {
   );
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
+// Native form fields plus widgets that render as a button/role rather than a
+// native tag — notably Base UI Select (its trigger is a <button role=combobox>
+// and its popup uses role=listbox/option), Menu, and Dialog. Focus on (or
+// within) any of these is treated as "interactive".
+const INTERACTIVE_SELECTOR = [
+  "input",
+  "textarea",
+  "select",
+  "button",
+  "a[href]",
+  "[role='combobox']",
+  "[role='listbox']",
+  "[role='option']",
+  "[role='menu']",
+  "[role='menuitem']",
+  "[role='dialog']",
+  "[role='textbox']",
+  "[role='searchbox']",
+].join(",");
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.tagName === "SELECT" ||
-    target.isContentEditable
-  );
+  return target.isContentEditable || target.closest(INTERACTIVE_SELECTOR) !== null;
 }
 
 /**
  * Install a single keydown listener that fires the first matching hotkey.
  * Bindings may change every render (e.g. the dynamic cell list), so a ref keeps
- * the listener itself stable. Inside editable fields only ⌘/Ctrl chords fire,
- * so typing "⌥1" inserts text while "⌘K" still toggles the palette.
+ * the listener itself stable. While focus is on an interactive control (a form
+ * field, button, or Base UI Select/menu/dialog) only ⌘/Ctrl chords fire, so a
+ * bare "⌥1" can't hijack a filter mid-interaction while "⌘K" still toggles the
+ * palette.
  */
 export function useHotkeys(hotkeys: Hotkey[]): void {
   const ref = useRef(hotkeys);
   ref.current = hotkeys;
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      const editable = isEditableTarget(event.target);
+      const interactive = isInteractiveTarget(event.target);
       for (const hotkey of ref.current) {
-        if (editable && !hotkey.chord.meta) continue;
+        if (interactive && !hotkey.chord.meta) continue;
         if (matchesChord(event, hotkey.chord)) {
           event.preventDefault();
           hotkey.run();
