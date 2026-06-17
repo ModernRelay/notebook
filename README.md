@@ -24,11 +24,14 @@ reaches the page). Source flags (`--server/--graph/--token/--branch`) apply to
 
 ### Agent / scripting surface
 
+Use the same zero-install `npx` form (after `npm i -g @modernrelay/notebook`, the
+short `mr-notebook` / `modernrelay-notebook` bins are equivalent):
+
 ```bash
-mr-notebook schema                 # JSON Schema for the notebook YAML
-mr-notebook catalog                # lens/control/action prop schemas as JSON
-mr-notebook validate nb.yaml --json    # { ok, errors[], warnings? }, exit 0/1
-mr-notebook render   nb.yaml           # headless run → cell results as JSON
+npx @modernrelay/notebook schema                   # JSON Schema for the notebook YAML
+npx @modernrelay/notebook catalog                  # lens/control/action prop schemas as JSON
+npx @modernrelay/notebook validate nb.yaml --json  # { ok, errors[], warnings? }, exit 0/1
+npx @modernrelay/notebook render   nb.yaml         # headless run → cell results as JSON
 ```
 
 ## Develop (monorepo)
