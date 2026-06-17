@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/tui",
+  "name": "@modernrelay/notebook-tui",
   "version": "0.0.1",
   "private": true,
   "description": "Terminal renderer for OmniGraph notebooks via @json-render/ink.",
@@ -18,11 +18,11 @@
   "dependencies": {
     "@json-render/core": "^0.19.0",
     "@json-render/ink": "^0.19.0",
-    "@omnigraph/catalog": "workspace:*",
-    "@omnigraph/client": "workspace:*",
-    "@omnigraph/runtime": "workspace:*",
-    "@omnigraph/fixture": "workspace:*",
-    "@omnigraph/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-catalog": "workspace:*",
+    "@modernrelay/notebook-client": "workspace:*",
+    "@modernrelay/notebook-runtime": "workspace:*",
+    "@modernrelay/notebook-fixture": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*",
     "ink": "^6.0.0",
     "react": "^19.2.6",
     "yaml": "^2.8.4"

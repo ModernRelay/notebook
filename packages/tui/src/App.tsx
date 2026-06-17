@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { JSONUIProvider, Renderer } from "@json-render/ink";
-import type { Notebook } from "@omnigraph/notebook-spec";
+import type { Notebook } from "@modernrelay/notebook-spec";
 import {
   createNotebookRuntime,
   type CellExecution,
   type RuntimeSnapshot,
   type Source,
-} from "@omnigraph/runtime";
+} from "@modernrelay/notebook-runtime";
 import { inkRegistry } from "./registry.js";
 
 interface AppProps {

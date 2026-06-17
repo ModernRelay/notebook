@@ -1,6 +1,6 @@
 import { defineCatalog } from "@json-render/core";
 import { schema, defineRegistry } from "@json-render/ink";
-import { lensActions, lensComponents } from "@omnigraph/catalog";
+import { lensActions, lensComponents } from "@modernrelay/notebook-catalog";
 import { Table } from "./components/Table.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";

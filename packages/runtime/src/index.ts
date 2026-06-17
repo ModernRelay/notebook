@@ -9,15 +9,15 @@ import type {
   MutationResult,
   MutationSpec,
   Notebook,
-} from "@omnigraph/notebook-spec";
-import { MutationParamsSchema } from "@omnigraph/notebook-spec";
-import { MutationSpecSchema } from "@omnigraph/notebook-spec";
+} from "@modernrelay/notebook-spec";
+import { MutationParamsSchema } from "@modernrelay/notebook-spec";
+import { MutationSpecSchema } from "@modernrelay/notebook-spec";
 import {
   assembleControlSpec,
   assembleLensSpec,
   type LensSpec,
   type QueryResult,
-} from "@omnigraph/catalog";
+} from "@modernrelay/notebook-catalog";
 
 export type StructuredQueryKind = FixtureQuery["kind"];
 export type MutationKind = MutationSpec["kind"];

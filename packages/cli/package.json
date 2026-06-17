@@ -1,0 +1,47 @@
+{
+  "name": "@modernrelay/notebook",
+  "version": "0.1.0",
+  "description": "Run an omnigraph notebook in your terminal or browser, validate it, and inspect it as JSON — one installable CLI over the omnigraph notebook stack.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "notebook": "./dist/cli.js",
+    "mr-notebook": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web-dist",
+    "notebook.schema.json"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @modernrelay/notebook-web build && tsup",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@json-render/core": "^0.19.0",
+    "@json-render/ink": "^0.19.0",
+    "@modernrelay/omnigraph": "^0.7.0",
+    "ink": "^6.0.0",
+    "react": "^19.2.6",
+    "yaml": "^2.8.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@modernrelay/notebook-catalog": "workspace:*",
+    "@modernrelay/notebook-client": "workspace:*",
+    "@modernrelay/notebook-fixture": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-runtime": "workspace:*",
+    "@modernrelay/notebook-tui": "workspace:*",
+    "@modernrelay/notebook-web": "workspace:*",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

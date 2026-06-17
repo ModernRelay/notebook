@@ -1,5 +1,5 @@
 import React from "react";
-import type { ButtonRuntimeProps } from "@omnigraph/catalog";
+import type { ButtonRuntimeProps } from "@modernrelay/notebook-catalog";
 import { Button as CossButton } from "@/components/ui/button";
 
 interface ComponentCtx<P> {

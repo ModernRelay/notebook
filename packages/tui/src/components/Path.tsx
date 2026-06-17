@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { PathRuntimeProps } from "@omnigraph/catalog";
+import type { PathRuntimeProps } from "@modernrelay/notebook-catalog";
 
 interface ComponentCtx<P> {
   props: P;

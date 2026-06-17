@@ -1,5 +1,5 @@
 import React from "react";
-import type { PathRuntimeProps } from "@omnigraph/catalog";
+import type { PathRuntimeProps } from "@modernrelay/notebook-catalog";
 
 interface ComponentCtx<P> {
   props: P;

@@ -1,6 +1,6 @@
 import React from "react";
 import { useActions, useStateValue } from "@json-render/react";
-import type { ActionListRuntimeProps } from "@omnigraph/catalog";
+import type { ActionListRuntimeProps } from "@modernrelay/notebook-catalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

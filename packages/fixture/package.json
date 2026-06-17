@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/fixture",
+  "name": "@modernrelay/notebook-fixture",
   "version": "0.0.1",
   "private": true,
   "description": "In-memory graph fixture loader + structured query runner. Drop-in for a live engine when iterating on UI.",
@@ -24,8 +24,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@omnigraph/runtime": "workspace:*",
-    "@omnigraph/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-runtime": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

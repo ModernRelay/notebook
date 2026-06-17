@@ -1,5 +1,5 @@
 {
-  "name": "@omnigraph/client",
+  "name": "@modernrelay/notebook-client",
   "version": "0.0.1",
   "private": true,
   "description": "Typed HTTP client for omnigraph-server plus a capability-aware runtime Source adapter.",
@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "@modernrelay/omnigraph": "^0.7.0",
-    "@omnigraph/runtime": "workspace:*",
-    "@omnigraph/notebook-spec": "workspace:*"
+    "@modernrelay/notebook-runtime": "workspace:*",
+    "@modernrelay/notebook-spec": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.5"

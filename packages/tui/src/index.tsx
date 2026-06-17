@@ -23,11 +23,11 @@ if (RAN_NON_TTY) {
 }
 
 import { render } from "ink";
-import { parseNotebook } from "@omnigraph/notebook-spec";
-import { FixtureSource } from "@omnigraph/fixture";
-import { loadFixture } from "@omnigraph/fixture/node";
-import { Client, ServerSource } from "@omnigraph/client";
-import type { Source } from "@omnigraph/runtime";
+import { parseNotebook } from "@modernrelay/notebook-spec";
+import { FixtureSource } from "@modernrelay/notebook-fixture";
+import { loadFixture } from "@modernrelay/notebook-fixture/node";
+import { Client, ServerSource } from "@modernrelay/notebook-client";
+import type { Source } from "@modernrelay/notebook-runtime";
 import { App } from "./App.js";
 
 interface ParsedArgs {

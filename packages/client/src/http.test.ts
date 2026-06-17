@@ -3,7 +3,7 @@ import { Client, OmnigraphHttpError } from "./http.js";
 
 // Regexes copied from packages/web/src/error-classifier.ts — the message
 // contract this facade must preserve when re-wrapping SDK errors. (web is
-// not a dependency of @omnigraph/client, so we assert against copies.)
+// not a dependency of @modernrelay/notebook-client, so we assert against copies.)
 const RE_UNAUTHORIZED = /returned 401|"code"\s*:\s*"unauthorized"/i;
 const RE_NETWORK = /Failed to fetch|NetworkError|TypeError: NetworkError|net::ERR/i;
 const RE_CONFLICT = /stale view of.*expected manifest table version|ExpectedVersionMismatch/i;

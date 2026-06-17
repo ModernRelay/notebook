@@ -1,7 +1,7 @@
-import { parseNotebook } from "@omnigraph/notebook-spec";
-import { Client, ServerSource } from "@omnigraph/client";
-import type { Source } from "@omnigraph/runtime";
-import { FixtureSource, parseFixture } from "@omnigraph/fixture";
+import { parseNotebook } from "@modernrelay/notebook-spec";
+import { Client, ServerSource } from "@modernrelay/notebook-client";
+import type { Source } from "@modernrelay/notebook-runtime";
+import { FixtureSource, parseFixture } from "@modernrelay/notebook-fixture";
 
 import defaultServerNotebookYaml from "../../../examples/company-server.notebook.yaml?raw";
 import defaultFixtureNotebookYaml from "../../../examples/company.notebook.yaml?raw";

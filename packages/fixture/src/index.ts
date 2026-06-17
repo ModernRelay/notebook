@@ -1,5 +1,5 @@
 // Browser-safe surface. Node-only `loadFixture` lives at
-// `@omnigraph/fixture/node` so bundlers don't pull in `node:fs` / `node:path`.
+// `@modernrelay/notebook-fixture/node` so bundlers don't pull in `node:fs` / `node:path`.
 export {
   parseFixture,
   FixtureSchema,

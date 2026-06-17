@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MutationSpecSchema } from "@omnigraph/notebook-spec";
+import { MutationSpecSchema } from "@modernrelay/notebook-spec";
 
 const ActionDescriptorSchema = z
   .object({
