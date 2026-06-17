@@ -22,6 +22,13 @@ export interface ClientOptions {
   baseUrl: string;
   /** Bearer token. Falls back to `OMNIGRAPH_TOKEN` env var when unset. */
   token?: string;
+  /**
+   * Cluster graph id. omnigraph-server 0.7.0+ is cluster-only: every read and
+   * mutation is served under `/graphs/{graphId}/…`, so a graph id is required.
+   * Without one the SDK throws `ConfigurationError` before issuing any request.
+   * Only `health()` (the flat `/healthz` route) works graph-id-free.
+   */
+  graphId?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -73,20 +80,45 @@ export class OmnigraphHttpError extends Error {
 
 export class Client {
   private readonly og: Omnigraph;
+  private readonly graphId: string | undefined;
 
   constructor(opts: ClientOptions) {
     const token =
       opts.token ??
       process.env.OMNIGRAPH_TOKEN ??
       process.env.OMNIGRAPH_BEARER_TOKEN;
+    this.graphId = opts.graphId;
     this.og = new Omnigraph({
       baseUrl: opts.baseUrl,
       ...(token !== undefined ? { token } : {}),
+      ...(opts.graphId !== undefined ? { graphId: opts.graphId } : {}),
       ...(opts.fetchImpl !== undefined ? { fetch: opts.fetchImpl } : {}),
     });
   }
 
+  /**
+   * Graph-scoped routes (query / mutate / branches) require a graph id under
+   * omnigraph-server 0.7.0+ (cluster-only). Enforce that at the facade boundary
+   * with a stable, owned `OmnigraphHttpError` rather than leaning on the SDK's
+   * internal `ConfigurationError` wording. `healthz()` is exempt (the flat
+   * `/healthz` route is graph-independent).
+   */
+  private requireGraph(path: string): void {
+    if (this.graphId === undefined || this.graphId === "") {
+      throw new OmnigraphHttpError(
+        0,
+        path,
+        JSON.stringify({
+          error:
+            "graphId is required for graph-scoped operations — omnigraph-server " +
+            "0.7.0+ is cluster-only. Pass { graphId } to new Client(...).",
+        }),
+      );
+    }
+  }
+
   async query(body: QueryInput, signal?: AbortSignal): Promise<ReadOutput> {
+    this.requireGraph("/query");
     try {
       const r = await this.og.query(
         body as SdkQueryInput,
@@ -105,6 +137,7 @@ export class Client {
   }
 
   async mutate(body: MutateInput, signal?: AbortSignal): Promise<ChangeOutput> {
+    this.requireGraph("/mutate");
     try {
       const r = await this.og.mutate(
         body as SdkMutationInput,
@@ -123,6 +156,7 @@ export class Client {
   }
 
   async branches(): Promise<BranchListOutput> {
+    this.requireGraph("/branches");
     try {
       return { branches: await this.og.branches.list() };
     } catch (e) {

@@ -35,6 +35,7 @@ interface ParsedArgs {
   server?: string;
   token?: string;
   branch?: string;
+  graph?: string;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -47,6 +48,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       out.token = argv[++i];
     } else if (a === "--branch") {
       out.branch = argv[++i];
+    } else if (a === "--graph") {
+      out.graph = argv[++i];
     } else if (a === "-h" || a === "--help") {
       printUsage();
       process.exit(0);
@@ -63,13 +66,16 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 function printUsage(): void {
   process.stderr.write(`
-omnigraph-tui <notebook.yaml> [--server URL] [--token TOKEN] [--branch NAME]
+omnigraph-tui <notebook.yaml> [--server URL] [--token TOKEN] [--branch NAME] [--graph ID]
 
   Fixture mode  — when the notebook declares \`fixture: <relative-path>\`,
                   reads + writes go to the in-memory FixtureSource.
   Server mode   — when the notebook declares \`server: <URL>\` (or you pass
                   --server), reads + writes go to omnigraph-server. Bearer
-                  token from --token or \$OMNIGRAPH_TOKEN.
+                  token from --token or \$OMNIGRAPH_TOKEN. omnigraph-server
+                  0.7.0+ is cluster-only, so a graph id is required: set
+                  \`graph:\` in the notebook, pass --graph, or set
+                  \$OMNIGRAPH_GRAPH_ID.
 
 `);
 }
@@ -89,6 +95,11 @@ export function main(argv: readonly string[]): void {
     args.token ??
     process.env.OMNIGRAPH_TOKEN ??
     process.env.OMNIGRAPH_BEARER_TOKEN;
+  // omnigraph-server 0.7.0+ is cluster-only; every read/write is graph-scoped.
+  // Precedence: explicit flag → environment → committed notebook (most-specific
+  // / most-ephemeral wins, matching how `token` resolves above).
+  const graphId =
+    args.graph ?? process.env.OMNIGRAPH_GRAPH_ID ?? notebook.graph;
 
   let source: Source;
   let label: string;
@@ -99,14 +110,23 @@ export function main(argv: readonly string[]): void {
     source = new FixtureSource(fixture);
     label = `fixture: ${notebook.fixture}`;
   } else if (serverUrl) {
+    if (!graphId) {
+      process.stderr.write(
+        `omnigraph-tui: server mode requires a graph id (omnigraph-server 0.7.0+\n` +
+          `is cluster-only). Set \`graph:\` in the notebook, pass --graph <id>,\n` +
+          `or set $OMNIGRAPH_GRAPH_ID.\n`,
+      );
+      process.exit(2);
+    }
     const client = new Client({
       baseUrl: serverUrl,
+      graphId,
       ...(token !== undefined ? { token } : {}),
     });
     source = new ServerSource(client, {
       ...(args.branch !== undefined ? { branch: args.branch } : {}),
     });
-    label = `server: ${serverUrl}`;
+    label = `server: ${serverUrl} · graph: ${graphId}`;
   } else {
     process.stderr.write(
       `omnigraph-tui: notebook has neither \`fixture:\` nor \`server:\`,\n` +

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadFixture } from "./loader.js";
 
 function tmpFile(content: unknown): string {
@@ -49,7 +50,12 @@ describe("loadFixture", () => {
   });
 
   it("loads the company-context fixture", () => {
-    const path = "/Users/andrew/code/omnigraph-ui/examples/fixtures/company-context.json";
+    const path = fileURLToPath(
+      new URL(
+        "../../../examples/fixtures/company-context.json",
+        import.meta.url,
+      ),
+    );
     const fix = loadFixture(path);
     expect(fix.nodes.length).toBe(69);
     expect(fix.edges.length).toBe(129);

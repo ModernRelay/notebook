@@ -229,6 +229,7 @@ function ActiveCellView({
             · {cell.result.row_count} row(s) · {cell.durationMs}ms
           </Text>
         )}
+        {cell.pending && <Text color="cyan"> · updating…</Text>}
       </Box>
 
       {/* Inline controls (filter Selects, Toggles, action Buttons) — render
@@ -246,7 +247,9 @@ function ActiveCellView({
       {cell.error !== null && (
         <Text color="red">{cell.error.message}</Text>
       )}
-      {cell.error === null && cell.spec !== null && (
+      {/* Keep the last good lens visible even on a failed re-read
+          (stale-while-revalidate); the error shows above it. */}
+      {cell.spec !== null && (
         <Box marginTop={1} marginLeft={1} flexDirection="column">
           <Renderer spec={cell.spec} registry={inkRegistry} />
         </Box>

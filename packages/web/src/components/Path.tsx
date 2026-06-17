@@ -17,7 +17,7 @@ export function Path({
 }: ComponentCtx<PathRuntimeProps>): React.ReactElement {
   const { steps, rows } = p;
   if (rows.length === 0) {
-    return <p className="italic text-zinc-500">(no path)</p>;
+    return <p className="text-sm italic text-muted-foreground">(no path)</p>;
   }
   return (
     <ul className="space-y-2">
@@ -46,7 +46,7 @@ export function Path({
 
 function Node({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <span className="rounded-md bg-zinc-800 px-2 py-0.5 font-medium text-zinc-100">
+    <span className="rounded-md bg-secondary px-2 py-0.5 font-medium text-secondary-foreground">
       {children}
     </span>
   );
@@ -57,5 +57,7 @@ function Predicate({
 }: {
   children: React.ReactNode;
 }): React.ReactElement {
-  return <span className="font-mono text-xs text-zinc-500">─{children}─▶</span>;
+  return (
+    <span className="font-mono text-xs text-muted-foreground">─{children}─▶</span>
+  );
 }

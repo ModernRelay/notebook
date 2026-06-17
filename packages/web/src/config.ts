@@ -76,11 +76,22 @@ export async function buildConfig(): Promise<AppConfig> {
     );
   }
   const branch = url.searchParams.get("branch") ?? undefined;
-  const client = new Client({ baseUrl: server, token: readToken() });
+  // omnigraph-server 0.7.0+ is cluster-only; reads/writes are graph-scoped.
+  const graph = url.searchParams.get("graph") ?? notebook.graph;
+  if (!graph) {
+    throw new Error(
+      "Server mode requires a graph id: top-level `graph:` or a `?graph=` URL parameter.",
+    );
+  }
+  const client = new Client({
+    baseUrl: server,
+    token: readToken(),
+    graphId: graph,
+  });
   return {
     notebook,
     source: new ServerSource(client, branch ? { branch } : {}),
-    label: `server: ${server}${branch ? ` · ${branch}` : ""}`,
+    label: `server: ${server} · graph: ${graph}${branch ? ` · ${branch}` : ""}`,
     mode: "server",
   };
 }

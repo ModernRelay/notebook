@@ -16,7 +16,9 @@ export function Subgraph({
 }: ComponentCtx<SubgraphRuntimeProps>): React.ReactElement {
   const { center, depth, rows } = p;
   if (rows.length === 0) {
-    return <p className="italic text-zinc-500">(no neighborhood)</p>;
+    return (
+      <p className="text-sm italic text-muted-foreground">(no neighborhood)</p>
+    );
   }
 
   const groups = new Map<string, Group>();
@@ -27,25 +29,33 @@ export function Subgraph({
     const neighbor = r.neighbor !== undefined ? String(r.neighbor) : null;
     const existing = groups.get(id);
     if (existing) existing.edges.push({ predicate, neighbor });
-    else groups.set(id, { centerId: id, centerLabel: label, edges: [{ predicate, neighbor }] });
+    else
+      groups.set(id, {
+        centerId: id,
+        centerLabel: label,
+        edges: [{ predicate, neighbor }],
+      });
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-xs uppercase tracking-wide text-zinc-500">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {center.type} · depth {depth}
       </p>
       {[...groups.values()].map((g) => (
         <div key={g.centerId} className="space-y-1">
-          <p className="text-sm font-semibold text-zinc-100">
+          <p className="text-sm font-semibold text-foreground">
             ● {g.centerLabel || g.centerId}
           </p>
           <ul className="ml-3 space-y-0.5 text-sm">
             {g.edges.map((e, idx) => {
               if (e.predicate === null && e.neighbor === null) return null;
               return (
-                <li key={idx} className="flex items-center gap-2 text-zinc-300">
-                  <span className="font-mono text-xs text-zinc-500">
+                <li
+                  key={idx}
+                  className="flex items-center gap-2 text-foreground"
+                >
+                  <span className="font-mono text-xs text-muted-foreground">
                     ─{e.predicate ?? "?"}─▶
                   </span>
                   <span className="font-medium">{e.neighbor ?? "?"}</span>

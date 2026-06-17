@@ -9,3 +9,6 @@ dist/
 *.pid
 .vite/
 .server-demo/
+
+# Private/local notebooks that point at real operator graphs (not for the repo).
+examples/p9-os.notebook.yaml

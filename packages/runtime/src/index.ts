@@ -90,6 +90,14 @@ export interface CellExecution {
   controlSpecs: LensSpec[];
   durationMs: number;
   error: { message: string; cause?: string } | null;
+  /**
+   * True while a data cell is re-executing (e.g. a filter change or a
+   * mutation-triggered re-query) but its previous `spec`/`result` are still
+   * being shown (stale-while-revalidate). Renderers use this to show a
+   * per-cell loading affordance without clearing the existing content.
+   * First load is signalled by `RuntimeSnapshot.status === "loading"` instead.
+   */
+  pending: boolean;
 }
 
 export interface NotebookExecution {
@@ -401,6 +409,9 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     const previous = this.cellRuns.get(cell.id);
     if (previous) previous.controller.abort();
     this.cellRuns.set(cell.id, { generation, controller });
+    // Mark pending while we re-read — the previous spec/result stay visible
+    // (stale-while-revalidate); the renderer shows a loading affordance.
+    this.markCellPending(cell.id);
 
     try {
       const request = this.readRequestForCell(cell);
@@ -419,9 +430,16 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       );
     } catch (err) {
       if (!this.isCurrentRun(cell.id, generation) || isAbortError(err)) return;
-      this.rawResults.delete(cell.id);
+      // Stale-while-revalidate on failure: keep the last good spec/result
+      // visible and attach the error, instead of wiping the cell to an empty
+      // error state. rawResults is left intact so the stale view stays coherent.
+      // First-load failures have no prior spec, so they fall back to empty.
+      const previous = this.snapshot.cells.find(
+        (existing) => existing.cell.id === cell.id,
+      );
       this.setCellExecution(cell.id, {
-        ...emptyCellExecution(cell),
+        ...(previous ?? emptyCellExecution(cell)),
+        pending: false,
         durationMs: Date.now() - start,
         error: { message: errorMessage(err) },
       });
@@ -440,15 +458,37 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     this.notify();
   }
 
+  /** Flip a cell to pending without disturbing its current spec/result. */
+  private markCellPending(cellId: string): void {
+    let changed = false;
+    const cells = this.snapshot.cells.map((existing) => {
+      if (existing.cell.id === cellId && !existing.pending) {
+        changed = true;
+        return { ...existing, pending: true };
+      }
+      return existing;
+    });
+    if (!changed) return;
+    this.snapshot = { ...this.snapshot, cells };
+    this.notify();
+  }
+
   private rebuildSpecsFromRaw(): void {
     const cells = this.snapshot.cells.map((execution) => {
       const raw = this.rawResults.get(execution.cell.id);
       if (!raw || isControl(execution.cell)) return execution;
-      return this.buildDataCellExecution(
-        execution.cell,
-        raw,
-        execution.durationMs,
-      );
+      // Re-derive spec/result (e.g. an optimistic overlay) without disturbing
+      // the cell's load lifecycle — `pending` is owned by the read path
+      // (markCellPending → runCell), so a mutation-triggered rebuild must not
+      // clear an in-flight cell's "updating…" cue.
+      return {
+        ...this.buildDataCellExecution(
+          execution.cell,
+          raw,
+          execution.durationMs,
+        ),
+        pending: execution.pending,
+      };
     });
     this.snapshot = { ...this.snapshot, cells };
   }
@@ -478,6 +518,7 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       controlSpecs: buildControlSpecs(cell),
       durationMs,
       error: null,
+      pending: false,
     };
   }
 
@@ -646,6 +687,7 @@ function emptyCellExecution(cell: Cell): CellExecution {
     controlSpecs: buildControlSpecs(cell),
     durationMs: 0,
     error: null,
+    pending: false,
   };
 }
 
@@ -664,6 +706,7 @@ function buildControlCellExecution(
     controlSpecs: buildControlSpecs(cell),
     durationMs,
     error: null,
+    pending: false,
   };
 }
 

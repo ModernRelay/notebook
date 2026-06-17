@@ -1,6 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
+// Fonts for the COSS design tokens (--font-sans / --font-mono). Variable
+// builds, imported here instead of next/font. Must precede ./index.css.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/geist-mono";
 import "./index.css";
 
 const root = document.getElementById("root");

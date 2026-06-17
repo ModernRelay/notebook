@@ -1,16 +1,20 @@
 version: 1
-title: Company context (live RustFS-backed omnigraph)
+title: Company context (live cluster-backed omnigraph)
 server: http://127.0.0.1:8080
+# omnigraph-server 0.7.0+ is cluster-only: reads/writes are served under
+# /graphs/{graph}/…. `--graph`/`?graph=`/$OMNIGRAPH_GRAPH_ID override this.
+graph: company
 
 # Server-mode demo. Same lens components, same action wiring as the fixture
-# notebook — but reads go to omnigraph-server (POST /read) and ActionList
-# clicks go to POST /change (one atomic Lance commit per click). Mutations
-# persist across server restarts.
+# notebook — but reads go to omnigraph-server (POST /graphs/{graph}/query) and
+# ActionList clicks go to POST /graphs/{graph}/mutate (one atomic Lance commit
+# per click). Mutations persist across server restarts. Run scripts/server-demo.sh
+# first to boot a local filesystem cluster serving this `graph`.
 #
-# v0.7 scope: only `nodes` and `path` query kinds translate to .gq.
-# Per-step `where` filters land in v0.8, so this notebook shows ALL clauses
-# rather than narrowing by selected policy. The ActionList per-row buttons
-# still let the user approve/reject any individual clause.
+# Translation scope: only `nodes` and `path` query kinds translate to .gq.
+# Per-step `where` filters are not yet translated, so this notebook shows ALL
+# clauses rather than narrowing by selected policy. The ActionList per-row
+# buttons still let the user approve/reject any individual clause.
 
 cells:
 

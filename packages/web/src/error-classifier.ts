@@ -1,7 +1,7 @@
 // Mapping engine / network errors to user-facing messages.
 //
 // Server responses come back as text like
-//   `omnigraph-server /change returned 500: {"error":"storage: ...", "code": "internal"}`
+//   `omnigraph-server /mutate returned 500: {"error":"storage: ...", "code": "internal"}`
 // or as `Error: Failed to fetch` when the server is unreachable. The
 // raw forms are accurate but unfriendly. classifyMutationError tags
 // the kind so the inline error panel can render a real headline +
