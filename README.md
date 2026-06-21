@@ -4,6 +4,17 @@ Notebook UI for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each note
 
 One catalog of components, two renderers (terminal and web), one fixture-driven dev loop.
 
+## What it's for
+
+Turn an OmniGraph graph database into a **read-and-act dashboard you describe in one YAML file** — rendered identically in a terminal and a browser.
+
+Normally you inspect a graph by writing queries and reading JSON, or by building a bespoke UI. A notebook is the layer between: a YAML file that *declares what slices of the graph to show and what actions to allow*, not code. Each cell is a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) fed by a structured query, or a control (`Select`/`Toggle`/`Button`) that filters state or mutates the graph. See `examples/company.notebook.yaml`: a status filter, a decisions table, a `Signal → Decision → Actor` path, an ego subgraph, and a clause list with inline Approve/Reject buttons — no UI code anywhere.
+
+Two bets make it work:
+
+- **Typed lenses, not a generic graph viewer** — you name the view you want; the system renders it.
+- **Write once, render anywhere** — the same YAML drives the Ink terminal UI and the React web UI, against an in-memory fixture (dev) or a live omnigraph-server (prod). It's bidirectional: lenses read the graph, controls and actions write back to it.
+
 ## Install & run (CLI)
 
 The published front door is **`@modernrelay/notebook`** — point it at any notebook YAML:
@@ -57,10 +68,8 @@ The fixture demos render the same cells against the in-memory `examples/fixtures
 
 | Package | Purpose |
 |---|---|
-| `@modernrelay/notebook-spec` | Zod schemas for the notebook YAML + structured query DSL. |
+| `@modernrelay/notebook-core` | The engine — start here. Three modules behind one entry: `spec` (Zod YAML schemas + query DSL), `catalog` (`lensComponents`/`lensActions` + `assembleLensSpec`), `runtime` (capability-aware execution, state, mutations). The `@json-render/core` analog. |
 | `@modernrelay/notebook-fixture` | In-memory loader + nodes/path/ego query runner. |
-| `@modernrelay/notebook-catalog` | Shared `lensComponents` map + `assembleLensSpec` helper. |
-| `@modernrelay/notebook-runtime` | Notebook runtime for source capabilities, execution, state, actions, and mutations. |
 | `@modernrelay/notebook-client` | HTTP client + live `ServerSource` adapter for omnigraph-server. |
 | `@modernrelay/notebook-tui` | Ink renderer + the `omnigraph-tui` binary. |
 | `@modernrelay/notebook-web` | Vite + React + Tailwind v4 SPA. |

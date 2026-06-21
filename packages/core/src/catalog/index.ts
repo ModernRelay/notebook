@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Spec, UIElement, VisibilityCondition } from "@json-render/core";
-import type { ComponentKind, LensKind, ActionBinding } from "@modernrelay/notebook-spec";
+import type { ComponentKind, LensKind, ActionBinding } from "../spec/index.js";
 import {
   TableAuthorPropsSchema,
   TableRuntimePropsSchema,
@@ -94,7 +94,7 @@ export const lensComponents = {
  * `approve` / `reject` are demo handler-bound actions. The host renderer
  * (App.tsx) provides their implementations via JSONUIProvider.handlers.
  */
-import { MutationSpecSchema } from "@modernrelay/notebook-spec";
+import { MutationSpecSchema } from "../spec/index.js";
 
 export const lensActions = {
   setState: {

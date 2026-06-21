@@ -1,6 +1,6 @@
 import React from "react";
 import { useBoundProp } from "@json-render/react";
-import type { ToggleRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { ToggleRuntimeProps } from "@modernrelay/notebook-core";
 import { Switch } from "@/components/ui/switch";
 
 interface ComponentCtx<P> {

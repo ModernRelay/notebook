@@ -24,8 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modernrelay/notebook-runtime": "workspace:*",
-    "@modernrelay/notebook-spec": "workspace:*",
+    "@modernrelay/notebook-core": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@ import type {
   FixtureNodesQuery,
   FixturePathQuery,
   FixtureEgoQuery,
-} from "@modernrelay/notebook-spec";
+} from "@modernrelay/notebook-core";
 import type { Fixture, FixtureNode, FixtureEdge } from "./validator.js";
 
 export type ResultRow = Record<string, unknown>;

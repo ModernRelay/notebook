@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useFocus, useInput } from "ink";
-import type { ButtonRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { ButtonRuntimeProps } from "@modernrelay/notebook-core";
 
 interface ComponentCtx<P> {
   props: P;

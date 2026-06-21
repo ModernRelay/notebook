@@ -1,176 +1,45 @@
 import type { VisibilityCondition } from "@json-render/core";
+import type { Cell, LensKind, Notebook } from "../spec/index.js";
+import { MutationParamsSchema } from "../spec/index.js";
+import { assembleLensSpec, type QueryResult } from "../catalog/index.js";
 import type {
-  ActionBinding,
-  Cell,
-  ControlKind,
-  FixtureQuery,
-  LensKind,
-  MutationParams,
-  MutationResult,
-  MutationSpec,
-  Notebook,
-} from "@modernrelay/notebook-spec";
-import { MutationParamsSchema } from "@modernrelay/notebook-spec";
-import { MutationSpecSchema } from "@modernrelay/notebook-spec";
+  CellExecution,
+  CreateNotebookRuntimeOptions,
+  NotebookRuntime,
+  ReadOutput,
+  ReadRequest,
+  RuntimeDispatchContext,
+  RuntimeSnapshot,
+  RuntimeStateChange,
+  RuntimeTarget,
+  Source,
+} from "./types.js";
 import {
-  assembleControlSpec,
-  assembleLensSpec,
-  type LensSpec,
-  type QueryResult,
-} from "@modernrelay/notebook-catalog";
-
-export type StructuredQueryKind = FixtureQuery["kind"];
-export type MutationKind = MutationSpec["kind"];
-
-export interface SourceCapabilities {
-  structuredQueryKinds: readonly StructuredQueryKind[];
-  rawGq: boolean;
-  mutationKinds: readonly MutationKind[];
-  branchReads: boolean;
-  snapshotReads: boolean;
-  branchWrites: boolean;
-}
-
-export interface RuntimeTarget {
-  branch?: string;
-  snapshot?: string;
-}
-
-export interface ReadRequest {
-  cellId: string;
-  querySource?: string;
-  queryName?: string;
-  params?: Record<string, unknown>;
-  branch?: string;
-  snapshot?: string;
-  fixtureQuery?: FixtureQuery;
-}
-
-export interface ReadOutput {
-  query_name: string;
-  target: string;
-  row_count: number;
-  columns: string[];
-  rows: Record<string, unknown>[];
-}
-
-export interface ExecutionContext {
-  cellId: string;
-  readTarget: RuntimeTarget;
-  state: Record<string, unknown>;
-  signal?: AbortSignal;
-}
-
-export interface MutationCommand {
-  params: MutationParams;
-  cellId?: string;
-}
-
-export interface MutationContext {
-  cellId?: string;
-  readTarget: RuntimeTarget;
-  writeTarget: RuntimeTarget;
-  state: Record<string, unknown>;
-  signal?: AbortSignal;
-}
-
-export interface Source {
-  capabilities(): SourceCapabilities;
-  read(request: ReadRequest, context: ExecutionContext): Promise<ReadOutput>;
-  mutate?(
-    command: MutationCommand,
-    context: MutationContext,
-  ): Promise<MutationResult>;
-}
-
-export interface CellExecution {
-  cell: Cell;
-  result: QueryResult | null;
-  spec: LensSpec | null;
-  controlSpecs: LensSpec[];
-  durationMs: number;
-  error: { message: string; cause?: string } | null;
-  /**
-   * True while a data cell is re-executing (e.g. a filter change or a
-   * mutation-triggered re-query) but its previous `spec`/`result` are still
-   * being shown (stale-while-revalidate). Renderers use this to show a
-   * per-cell loading affordance without clearing the existing content.
-   * First load is signalled by `RuntimeSnapshot.status === "loading"` instead.
-   */
-  pending: boolean;
-}
-
-export interface NotebookExecution {
-  notebook: Notebook;
-  cells: CellExecution[];
-  startedAt: number;
-  finishedAt: number;
-}
-
-export type RuntimeStatus = "loading" | "ready" | "fatal";
-
-export interface RuntimeSnapshot {
-  status: RuntimeStatus;
-  notebook: Notebook;
-  cells: CellExecution[];
-  state: Record<string, unknown>;
-  generation: number;
-  startedAt: number;
-  finishedAt: number | null;
-  error: string | null;
-  mutationError: string | null;
-  warnings: string[];
-}
-
-export interface RuntimeStateChange {
-  path: string;
-  value: unknown;
-}
-
-export interface RuntimeDispatchContext {
-  params?: Record<string, unknown>;
-  cellId?: string;
-}
-
-export interface CreateNotebookRuntimeOptions {
-  notebook: Notebook;
-  source: Source;
-  defaultTarget?: RuntimeTarget;
-  initialState?: Record<string, unknown>;
-}
-
-export interface NotebookRuntime {
-  subscribe(listener: () => void): () => void;
-  getSnapshot(): RuntimeSnapshot;
-  applyStateChanges(changes: RuntimeStateChange[]): void;
-  dispatch(action: string, context?: RuntimeDispatchContext): Promise<void>;
-  dispose(): void;
-}
-
-interface CompatibilityResult {
-  errors: string[];
-  warnings: string[];
-}
-
-interface OptimisticPatch {
-  key: string;
-  targetType: string;
-  targetId: string;
-  field: string;
-  value: unknown;
-  saving: boolean;
-  error?: string;
-}
+  buildControlCellExecution,
+  buildControlSpecs,
+  dataCellIds,
+  emptyCellExecution,
+  isControl,
+} from "./controls.js";
+import {
+  dependencyMap,
+  pointersOverlap,
+  resolveFixtureQuery,
+  resolveParams,
+  setAtPointer,
+} from "./resolve.js";
+import {
+  actionListMutationTargetTypes,
+  type OptimisticPatch,
+  patchFromMutation,
+  patchKey,
+} from "./mutations.js";
+import { validateNotebookCompatibility } from "./compatibility.js";
+import { errorMessage, isAbortError, stringProp } from "./utils.js";
 
 interface CellRun {
   generation: number;
   controller: AbortController;
-}
-
-const CONTROL_KINDS: readonly ControlKind[] = ["Button", "Toggle", "Select"];
-
-function isControl(cell: Cell): boolean {
-  return (CONTROL_KINDS as readonly string[]).includes(cell.lens);
 }
 
 export function createNotebookRuntime(
@@ -636,284 +505,4 @@ class NotebookRuntimeImpl implements NotebookRuntime {
   private notify(): void {
     for (const listener of this.listeners) listener();
   }
-}
-
-export function validateNotebookCompatibility(
-  notebook: Notebook,
-  capabilities: SourceCapabilities,
-): CompatibilityResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  for (const cell of notebook.cells) {
-    if (cell.query?.source !== undefined) {
-      warnings.push(
-        `${cell.id}: query.source raw .gq is deprecated; prefer query.fixture structured DSL`,
-      );
-      if (!capabilities.rawGq) {
-        errors.push(`${cell.id}: selected source does not support raw .gq`);
-      }
-    }
-    if (cell.query?.fixture !== undefined) {
-      const kind = cell.query.fixture.kind;
-      if (!capabilities.structuredQueryKinds.includes(kind)) {
-        errors.push(`${cell.id}: selected source does not support ${kind} queries`);
-      }
-    }
-    if (cell.query?.branch !== undefined && !capabilities.branchReads) {
-      errors.push(`${cell.id}: selected source does not support branch reads`);
-    }
-    if (cell.query?.snapshot !== undefined && !capabilities.snapshotReads) {
-      errors.push(`${cell.id}: selected source does not support snapshot reads`);
-    }
-
-    for (const mutation of actionListMutations(cell)) {
-      if (!capabilities.mutationKinds.includes(mutation.kind)) {
-        errors.push(
-          `${cell.id}: selected source does not support ${mutation.kind} mutations`,
-        );
-      }
-    }
-  }
-
-  return { errors, warnings };
-}
-
-function emptyCellExecution(cell: Cell): CellExecution {
-  return {
-    cell,
-    result: null,
-    spec: null,
-    controlSpecs: buildControlSpecs(cell),
-    durationMs: 0,
-    error: null,
-    pending: false,
-  };
-}
-
-function buildControlCellExecution(
-  cell: Cell,
-  durationMs: number,
-): CellExecution {
-  const spec = assembleControlSpec(cell.id, cell.lens, cell.props, {
-    on: cell.on,
-    visible: cell.visible as VisibilityCondition | undefined,
-  });
-  return {
-    cell,
-    result: null,
-    spec,
-    controlSpecs: buildControlSpecs(cell),
-    durationMs,
-    error: null,
-    pending: false,
-  };
-}
-
-function buildControlSpecs(cell: Cell): LensSpec[] {
-  if (!cell.controls || cell.controls.length === 0) return [];
-  return cell.controls.map((ctl, idx) => {
-    const ctlId = ctl.id ?? `${cell.id}__ctl_${idx}`;
-    return assembleControlSpec(ctlId, ctl.lens, ctl.props, {
-      on: ctl.on,
-      visible: ctl.visible as VisibilityCondition | undefined,
-    });
-  });
-}
-
-function dependencyMap(notebook: Notebook): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
-  for (const cell of notebook.cells) {
-    if (isControl(cell) || !cell.query) continue;
-    const deps = new Set<string>();
-    if (cell.query.params !== undefined) collectStatePointers(cell.query.params, deps);
-    if (cell.query.fixture !== undefined) collectStatePointers(cell.query.fixture, deps);
-    out.set(cell.id, deps);
-  }
-  return out;
-}
-
-function collectStatePointers(value: unknown, out: Set<string>): void {
-  if (!value || typeof value !== "object") return;
-  if (Array.isArray(value)) {
-    for (const item of value) collectStatePointers(item, out);
-    return;
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.$state === "string") out.add(record.$state);
-  for (const item of Object.values(record)) collectStatePointers(item, out);
-}
-
-function pointersOverlap(a: string, b: string): boolean {
-  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
-}
-
-function resolveParams(
-  params: Record<string, unknown>,
-  state: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(params)) {
-    out[key] = resolveExpr(value, state);
-  }
-  return out;
-}
-
-function resolveFixtureQuery(
-  query: FixtureQuery,
-  state: Record<string, unknown>,
-): FixtureQuery {
-  switch (query.kind) {
-    case "nodes":
-      return {
-        ...query,
-        ...(query.where !== undefined
-          ? { where: resolveWhere(query.where, state) }
-          : {}),
-      };
-    case "ego":
-      return {
-        ...query,
-        center: {
-          ...query.center,
-          where: resolveWhere(query.center.where, state),
-        },
-      };
-    case "path":
-      return query;
-  }
-}
-
-function resolveWhere(
-  where: Record<string, unknown>,
-  state: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(where)) {
-    const resolved = resolveExpr(value, state);
-    if (resolved === null || resolved === undefined || resolved === "") continue;
-    out[key] = resolved;
-  }
-  return out;
-}
-
-function resolveExpr(value: unknown, state: Record<string, unknown>): unknown {
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "$state" in value
-  ) {
-    const obj = value as { $state: unknown; default?: unknown };
-    if (typeof obj.$state !== "string") return undefined;
-    const resolved = resolveStatePointer(state, obj.$state);
-    if (resolved === undefined || resolved === null || resolved === "") {
-      return obj.default;
-    }
-    return resolved;
-  }
-  return value;
-}
-
-function resolveStatePointer(
-  state: Record<string, unknown>,
-  pointer: string,
-): unknown {
-  if (!pointer.startsWith("/")) return undefined;
-  const parts = pointer
-    .slice(1)
-    .split("/")
-    .map((seg) => seg.replace(/~1/g, "/").replace(/~0/g, "~"));
-  let cur: unknown = state;
-  for (const part of parts) {
-    if (cur === null || cur === undefined || typeof cur !== "object") {
-      return undefined;
-    }
-    cur = (cur as Record<string, unknown>)[part];
-  }
-  return cur;
-}
-
-export function setAtPointer(
-  state: Record<string, unknown>,
-  pointer: string,
-  value: unknown,
-): Record<string, unknown> {
-  if (!pointer.startsWith("/")) return state;
-  const parts = pointer
-    .slice(1)
-    .split("/")
-    .map((seg) => seg.replace(/~1/g, "/").replace(/~0/g, "~"));
-  if (parts.length === 0) return state;
-
-  const root: Record<string, unknown> = { ...state };
-  let cur: Record<string, unknown> = root;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const key = parts[i] as string;
-    const existing = cur[key];
-    const next: Record<string, unknown> =
-      existing && typeof existing === "object" && !Array.isArray(existing)
-        ? { ...(existing as Record<string, unknown>) }
-        : {};
-    cur[key] = next;
-    cur = next;
-  }
-  cur[parts[parts.length - 1] as string] = value;
-  return root;
-}
-
-function dataCellIds(notebook: Notebook): string[] {
-  return notebook.cells.filter((cell) => !isControl(cell)).map((cell) => cell.id);
-}
-
-function stringProp(props: Record<string, unknown>, key: string): string | null {
-  const value = props[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function actionListMutations(cell: Cell): MutationSpec[] {
-  const actions = Array.isArray(cell.props.actions) ? cell.props.actions : [];
-  const out: MutationSpec[] = [];
-  for (const action of actions) {
-    if (!action || typeof action !== "object") continue;
-    const mutation = (action as Record<string, unknown>).mutation;
-    if (!mutation || typeof mutation !== "object") continue;
-    const parsed = MutationSpecSchema.safeParse(mutation);
-    if (parsed.success) out.push(parsed.data);
-  }
-  return out;
-}
-
-function actionListMutationTargetTypes(cell: Cell): Set<string> {
-  const out = new Set<string>();
-  for (const mutation of actionListMutations(cell)) {
-    if ("target_type" in mutation) out.add(mutation.target_type);
-  }
-  return out;
-}
-
-function patchFromMutation(params: MutationParams): OptimisticPatch | null {
-  switch (params.kind) {
-    case "set_field":
-      return {
-        key: patchKey(params.target_type, params.target_id, params.field),
-        targetType: params.target_type,
-        targetId: params.target_id,
-        field: params.field,
-        value: params.value,
-        saving: true,
-      };
-  }
-}
-
-function patchKey(targetType: string, targetId: string, field: string): string {
-  return `${targetType}:${targetId}:${field}`;
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === "AbortError";
 }

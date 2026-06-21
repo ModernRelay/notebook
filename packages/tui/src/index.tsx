@@ -23,11 +23,11 @@ if (RAN_NON_TTY) {
 }
 
 import { render } from "ink";
-import { parseNotebook } from "@modernrelay/notebook-spec";
+import { parseNotebook } from "@modernrelay/notebook-core";
 import { FixtureSource } from "@modernrelay/notebook-fixture";
 import { loadFixture } from "@modernrelay/notebook-fixture/node";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
-import type { Source } from "@modernrelay/notebook-runtime";
+import type { Source } from "@modernrelay/notebook-core";
 import { App } from "./App.js";
 
 interface ParsedArgs {

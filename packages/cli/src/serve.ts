@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseNotebook } from "@modernrelay/notebook-spec";
+import { parseNotebook } from "@modernrelay/notebook-core";
 
 import { proxyOg } from "./proxy.js";
 import type { Connection } from "./source.js";
