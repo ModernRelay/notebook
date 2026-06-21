@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 
-import { validateNotebookCompatibility } from "@modernrelay/notebook-runtime";
+import { validateNotebookCompatibility } from "@modernrelay/notebook-core";
 import { z } from "zod";
 
 import { SOURCE_OPTIONS, sourceOptionsFrom } from "../args.js";

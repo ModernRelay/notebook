@@ -13,8 +13,8 @@ import type {
   ReadRequest,
   Source,
   SourceCapabilities,
-} from "@modernrelay/notebook-runtime";
-import type { FixtureEgoQuery, MutationResult } from "@modernrelay/notebook-spec";
+} from "@modernrelay/notebook-core";
+import type { FixtureEgoQuery, MutationResult } from "@modernrelay/notebook-core";
 import { Client, type ChangeOutput } from "./http.js";
 import {
   edgeToPredicate,

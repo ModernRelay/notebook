@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 
-import { NotebookSchema } from "@modernrelay/notebook-spec";
+import { NotebookSchema } from "@modernrelay/notebook-core";
 import { z } from "zod";
 
 /**

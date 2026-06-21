@@ -1,5 +1,5 @@
 import React from "react";
-import type { TableRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { TableRuntimeProps } from "@modernrelay/notebook-core";
 import {
   Table as CossTable,
   TableBody,

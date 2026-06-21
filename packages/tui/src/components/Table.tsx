@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { TableRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { TableRuntimeProps } from "@modernrelay/notebook-core";
 
 interface ComponentCtx<P> {
   props: P;

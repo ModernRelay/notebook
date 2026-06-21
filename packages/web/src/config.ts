@@ -1,6 +1,6 @@
-import { parseNotebook } from "@modernrelay/notebook-spec";
+import { parseNotebook } from "@modernrelay/notebook-core";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
-import type { Source } from "@modernrelay/notebook-runtime";
+import type { Source } from "@modernrelay/notebook-core";
 import { FixtureSource, parseFixture } from "@modernrelay/notebook-fixture";
 
 import defaultServerNotebookYaml from "../../../examples/company-server.notebook.yaml?raw";

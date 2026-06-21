@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { SubgraphRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { SubgraphRuntimeProps } from "@modernrelay/notebook-core";
 
 interface ComponentCtx<P> {
   props: P;

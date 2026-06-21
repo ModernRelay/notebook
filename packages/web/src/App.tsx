@@ -4,7 +4,7 @@ import {
   createNotebookRuntime,
   type CellExecution,
   type RuntimeSnapshot,
-} from "@modernrelay/notebook-runtime";
+} from "@modernrelay/notebook-core";
 
 import { webRegistry } from "./registry.js";
 import {

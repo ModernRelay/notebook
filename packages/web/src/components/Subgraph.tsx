@@ -1,5 +1,5 @@
 import React from "react";
-import type { SubgraphRuntimeProps } from "@modernrelay/notebook-catalog";
+import type { SubgraphRuntimeProps } from "@modernrelay/notebook-core";
 
 interface ComponentCtx<P> {
   props: P;

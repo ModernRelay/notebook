@@ -20,7 +20,7 @@ import type {
   FixturePathQuery,
   FixtureQuery,
   MutationParams,
-} from "@modernrelay/notebook-spec";
+} from "@modernrelay/notebook-core";
 
 export interface TranslatedQuery {
   query_source: string;

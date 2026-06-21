@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Notebook } from "@modernrelay/notebook-spec";
+import type { Notebook } from "../spec/index.js";
 import {
   createNotebookRuntime,
   type ExecutionContext,

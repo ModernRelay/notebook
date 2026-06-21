@@ -1,4 +1,4 @@
-import type { MutationResult } from "@modernrelay/notebook-spec";
+import type { MutationResult } from "@modernrelay/notebook-core";
 import type {
   ExecutionContext,
   MutationCommand,
@@ -7,7 +7,7 @@ import type {
   ReadRequest,
   Source,
   SourceCapabilities,
-} from "@modernrelay/notebook-runtime";
+} from "@modernrelay/notebook-core";
 import type { Fixture } from "./validator.js";
 import { runFixtureQuery } from "./runner.js";
 

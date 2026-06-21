@@ -4,8 +4,8 @@ import { dirname, resolve } from "node:path";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
 import { FixtureSource } from "@modernrelay/notebook-fixture";
 import { loadFixture } from "@modernrelay/notebook-fixture/node";
-import { parseNotebook, type Notebook } from "@modernrelay/notebook-spec";
-import type { Source } from "@modernrelay/notebook-runtime";
+import { parseNotebook, type Notebook } from "@modernrelay/notebook-core";
+import type { Source } from "@modernrelay/notebook-core";
 
 export interface SourceOptions {
   server?: string;
