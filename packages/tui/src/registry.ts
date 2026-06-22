@@ -5,6 +5,8 @@ import { Table } from "./components/Table.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";
 import { ActionList } from "./components/ActionList.js";
+import { Timeline } from "./components/Timeline.js";
+import { Card } from "./components/Card.js";
 import { Button } from "./components/Button.js";
 import { Toggle } from "./components/Toggle.js";
 import { Select } from "./components/Select.js";
@@ -15,7 +17,7 @@ const catalog = defineCatalog(schema, {
 });
 
 const { registry: inkRegistry } = defineRegistry(catalog, {
-  components: { Table, Path, Subgraph, ActionList, Button, Toggle, Select },
+  components: { Table, Path, Subgraph, ActionList, Timeline, Card, Button, Toggle, Select },
   actions: {
     setState: async (params, setState) => {
       const { statePath, value } = params as { statePath: string; value: unknown };

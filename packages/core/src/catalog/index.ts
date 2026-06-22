@@ -30,6 +30,20 @@ import {
   type ActionListRuntimeProps,
 } from "./lenses/action_list.js";
 import {
+  TimelineAuthorPropsSchema,
+  TimelineRuntimePropsSchema,
+  TimelineDescription,
+  type TimelineAuthorProps,
+  type TimelineRuntimeProps,
+} from "./lenses/timeline.js";
+import {
+  CardAuthorPropsSchema,
+  CardRuntimePropsSchema,
+  CardDescription,
+  type CardAuthorProps,
+  type CardRuntimeProps,
+} from "./lenses/card.js";
+import {
   ButtonRuntimePropsSchema,
   ButtonDescription,
 } from "./lenses/button.js";
@@ -46,6 +60,8 @@ export * from "./lenses/table.js";
 export * from "./lenses/path.js";
 export * from "./lenses/subgraph.js";
 export * from "./lenses/action_list.js";
+export * from "./lenses/timeline.js";
+export * from "./lenses/card.js";
 export * from "./lenses/button.js";
 export * from "./lenses/toggle.js";
 export * from "./lenses/select.js";
@@ -80,6 +96,8 @@ export const lensComponents = {
   Path:       { props: PathRuntimePropsSchema,       description: PathDescription },
   Subgraph:   { props: SubgraphRuntimePropsSchema,   description: SubgraphDescription },
   ActionList: { props: ActionListRuntimePropsSchema, description: ActionListDescription },
+  Timeline:   { props: TimelineRuntimePropsSchema,   description: TimelineDescription },
+  Card:       { props: CardRuntimePropsSchema,       description: CardDescription },
   Button:     { props: ButtonRuntimePropsSchema,     description: ButtonDescription },
   Toggle:     { props: ToggleRuntimePropsSchema,     description: ToggleDescription },
   Select:     { props: SelectRuntimePropsSchema,     description: SelectDescription },
@@ -208,6 +226,17 @@ function buildRuntimeProps(
       const author: ActionListAuthorProps =
         ActionListAuthorPropsSchema.parse(authorProps);
       const runtime: ActionListRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Timeline": {
+      const author: TimelineAuthorProps =
+        TimelineAuthorPropsSchema.parse(authorProps);
+      const runtime: TimelineRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Card": {
+      const author: CardAuthorProps = CardAuthorPropsSchema.parse(authorProps);
+      const runtime: CardRuntimeProps = { ...author, rows: result.rows };
       return runtime as unknown as Record<string, unknown>;
     }
   }

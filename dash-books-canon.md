@@ -276,7 +276,14 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
 **Phase 2 — representation depth.**
 - [ ] Typed result envelopes (`rows` / `graph` / `tree`) with schema-derived metadata (pending the decision above).
 - [ ] Auto-render tier from result metadata; explicit `lens:` overrides.
-- [ ] Curated, tested web-first component/layout catalog; TUI best-fit/degraded over the same contract.
+- [~] Curated, tested web-first component/layout catalog; TUI best-fit/degraded over the same contract.
+      - [x] **2A — layout tier, first primitive.** Cell `display: inline|drawer|modal` + `open_state`
+            JSON-pointer: cells sharing a pointer lift into one overlay, open while that pointer is truthy
+            (the same `/selected` a Table writes on row click), close clears it. Host-shell only — no
+            json-render/spec/runtime change; reuses the selection state + `applyStateChanges`. Web renders
+            the drawer/modal (`web/src/layout.ts` `partitionCells` + `components/ui/drawer.tsx`); the TUI is
+            layout-flat and renders every cell inline. Lenses (Timeline, Card, wrap, click-to-select) landed
+            alongside.
 - [ ] Extend the catalog by in-tree, reviewed contribution (no third-party/sandboxed lenses); TUI
       renderer or table fallback per component.
 - [ ] Explicit dependency DAG (inputs, controls, query params, reads, cells) — no client expression layer.

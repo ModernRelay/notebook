@@ -5,6 +5,8 @@ import {
   PathAuthorPropsSchema,
   SubgraphAuthorPropsSchema,
   TableAuthorPropsSchema,
+  TimelineAuthorPropsSchema,
+  CardAuthorPropsSchema,
 } from "@modernrelay/notebook-core";
 import type { ZodType } from "zod";
 import { z } from "zod";
@@ -18,6 +20,8 @@ const AUTHOR_PROPS: Record<string, ZodType> = {
   Path: PathAuthorPropsSchema,
   Subgraph: SubgraphAuthorPropsSchema,
   ActionList: ActionListAuthorPropsSchema,
+  Timeline: TimelineAuthorPropsSchema,
+  Card: CardAuthorPropsSchema,
 };
 
 /**

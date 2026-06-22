@@ -2,7 +2,14 @@ import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 
 /** Data-bearing lenses (cells with a query). */
-export const LensKind = z.enum(["Table", "Subgraph", "Path", "ActionList"]);
+export const LensKind = z.enum([
+  "Table",
+  "Subgraph",
+  "Path",
+  "ActionList",
+  "Timeline",
+  "Card",
+]);
 export type LensKind = z.infer<typeof LensKind>;
 
 /** Interactive controls (cells without a query). */
@@ -15,6 +22,8 @@ export const ComponentKind = z.enum([
   "Subgraph",
   "Path",
   "ActionList",
+  "Timeline",
+  "Card",
   "Button",
   "Toggle",
   "Select",
@@ -141,6 +150,19 @@ export const CellSchema = z
      * Accepts a boolean, a state-condition object, or an array (AND).
      */
     visible: z.unknown().optional(),
+    /**
+     * Presentation mode (host-shell layout tier, web-first). `inline` (default)
+     * stacks the cell in flow; `drawer`/`modal` render it in an overlay that is
+     * open while `open_state` is truthy. The TUI ignores this and renders inline.
+     */
+    display: z.enum(["inline", "drawer", "modal"]).optional(),
+    /**
+     * JSON-pointer whose truthy value opens this cell's overlay (with `display:
+     * drawer|modal`). Cells sharing an `open_state` render in one overlay; the
+     * close affordance clears this pointer. Typically the selection pointer a
+     * Table writes via `select_state` (e.g. "/selected").
+     */
+    open_state: z.string().optional(),
   })
   .strict()
   .refine(

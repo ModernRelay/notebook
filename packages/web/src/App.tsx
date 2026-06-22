@@ -30,6 +30,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Overlay } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 import { SearchIcon } from "lucide-react";
 import {
@@ -37,6 +38,7 @@ import {
   type CommandSection,
 } from "./components/CommandPalette.js";
 import { useHotkeys, type Hotkey } from "./lib/hotkeys.js";
+import { partitionCells, readPointer } from "./layout.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -231,13 +233,55 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
             message={snapshot.error ?? "runtime failed"}
           />
         )}
-        {snapshot.status === "ready" && (
-          <div className="space-y-6">
-            {snapshot.cells.map((cell) => (
-              <CellCard key={cell.cell.id} cell={cell} />
-            ))}
-          </div>
-        )}
+        {snapshot.status === "ready" &&
+          (() => {
+            // Layout tier: most cells stack inline; cells with `display:
+            // drawer|modal` lift into an overlay keyed by their `open_state`
+            // pointer (cells sharing a pointer share one overlay). The overlay
+            // is open while that pointer is truthy in runtime state — the same
+            // `/selected` a Table writes on row click — and close clears it.
+            const { inline, overlays } = partitionCells(snapshot.cells);
+            return (
+              <>
+                <div className="space-y-6">
+                  {inline.map((cell) => (
+                    <CellCard key={cell.cell.id} cell={cell} />
+                  ))}
+                </div>
+                {overlays.map((group) => {
+                  const selected = readPointer(snapshot.state, group.openState);
+                  const title =
+                    typeof selected === "string" && selected
+                      ? humanizeCellId(selected)
+                      : "Details";
+                  return (
+                    <Overlay
+                      key={`${group.variant}:${group.openState}`}
+                      open={Boolean(selected)}
+                      variant={group.variant}
+                      title={title}
+                      onClose={() =>
+                        runtime.applyStateChanges([
+                          { path: group.openState, value: "" },
+                        ])
+                      }
+                    >
+                      <div className="space-y-6">
+                        {group.cells.map((cell) => (
+                          <section key={cell.cell.id} className="space-y-3">
+                            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              {humanizeCellId(cell.cell.id)}
+                            </h3>
+                            <CellBody cell={cell} />
+                          </section>
+                        ))}
+                      </div>
+                    </Overlay>
+                  );
+                })}
+              </>
+            );
+          })()}
 
         {mutationError !== null && (
           <ErrorPanel
@@ -334,12 +378,6 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
     cell.cell.lens === "Toggle" ||
     cell.cell.lens === "Select";
 
-  // Re-querying (filter change / mutation re-run) keeps the previous spec
-  // visible; we dim the *lens output* and show an "updating…" cue, while the
-  // inline filter controls stay crisp so the user can keep interacting. A
-  // failed re-read also keeps the stale spec (shown dimmed beneath the error).
-  const dimContent = (cell.pending || cell.error !== null) && cell.spec !== null;
-
   return (
     <Card
       id={cell.cell.id}
@@ -368,37 +406,56 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {cell.controlSpecs.length > 0 && (
-          <div className="space-y-2">
-            {cell.controlSpecs.map((spec) => (
-              <Renderer key={spec.root} spec={spec} registry={webRegistry} />
-            ))}
-          </div>
-        )}
-        <div
-          className={cn("transition-opacity", dimContent && "opacity-50")}
-          aria-busy={cell.pending || undefined}
-        >
-          {cell.error !== null && (
-            <Alert variant="error" className="mb-3">
-              <AlertDescription className="font-mono text-xs">
-                {cell.error.message}
-              </AlertDescription>
-            </Alert>
-          )}
-          {cell.spec !== null && (
-            <Renderer spec={cell.spec} registry={webRegistry} />
-          )}
-          {cell.error === null && cell.spec === null && cell.pending && (
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-3 w-5/6" />
-              <Skeleton className="h-3 w-2/3" />
-            </div>
-          )}
-        </div>
+        <CellBody cell={cell} />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * A cell's interior — inline filter controls + the lens output, with the
+ * pending/error/skeleton states. Shared by the inline `CellCard` and the
+ * overlay drawer so both render identically.
+ *
+ * Re-querying (filter change / mutation re-run) keeps the previous spec
+ * visible; we dim the lens output and show an "updating…" cue while the inline
+ * controls stay crisp. A failed re-read also keeps the stale spec, shown dimmed
+ * beneath the error.
+ */
+function CellBody({ cell }: { cell: CellExecution }): React.ReactElement {
+  const dimContent = (cell.pending || cell.error !== null) && cell.spec !== null;
+  return (
+    <>
+      {cell.controlSpecs.length > 0 && (
+        <div className="space-y-2">
+          {cell.controlSpecs.map((spec) => (
+            <Renderer key={spec.root} spec={spec} registry={webRegistry} />
+          ))}
+        </div>
+      )}
+      <div
+        className={cn("transition-opacity", dimContent && "opacity-50")}
+        aria-busy={cell.pending || undefined}
+      >
+        {cell.error !== null && (
+          <Alert variant="error" className="mb-3">
+            <AlertDescription className="font-mono text-xs">
+              {cell.error.message}
+            </AlertDescription>
+          </Alert>
+        )}
+        {cell.spec !== null && (
+          <Renderer spec={cell.spec} registry={webRegistry} />
+        )}
+        {cell.error === null && cell.spec === null && cell.pending && (
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
+            <Skeleton className="h-3 w-2/3" />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

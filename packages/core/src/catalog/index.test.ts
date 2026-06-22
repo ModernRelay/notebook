@@ -17,14 +17,16 @@ const fakeResult: QueryResult = {
 };
 
 describe("lensComponents", () => {
-  it("registers all seven components (4 lenses + 3 controls)", () => {
+  it("registers all nine components (6 lenses + 3 controls)", () => {
     expect(Object.keys(lensComponents).sort()).toEqual([
       "ActionList",
       "Button",
+      "Card",
       "Path",
       "Select",
       "Subgraph",
       "Table",
+      "Timeline",
       "Toggle",
     ]);
   });
