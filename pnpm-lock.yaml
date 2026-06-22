@@ -45,9 +45,6 @@ importers:
       '@modernrelay/notebook-core':
         specifier: workspace:*
         version: link:../core
-      '@modernrelay/notebook-fixture':
-        specifier: workspace:*
-        version: link:../fixture
       '@modernrelay/notebook-tui':
         specifier: workspace:*
         version: link:../tui
@@ -90,19 +87,6 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@25.6.2)(vite@8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.8.4))
 
-  packages/fixture:
-    dependencies:
-      '@modernrelay/notebook-core':
-        specifier: workspace:*
-        version: link:../core
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      vitest:
-        specifier: ^4.1.5
-        version: 4.1.5(@types/node@25.6.2)(vite@8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.8.4))
-
   packages/tui:
     dependencies:
       '@json-render/core':
@@ -117,9 +101,6 @@ importers:
       '@modernrelay/notebook-core':
         specifier: workspace:*
         version: link:../core
-      '@modernrelay/notebook-fixture':
-        specifier: workspace:*
-        version: link:../fixture
       ink:
         specifier: ^6.0.0
         version: 6.8.0(@types/react@19.2.14)(react@19.2.6)
@@ -163,9 +144,6 @@ importers:
       '@modernrelay/notebook-core':
         specifier: workspace:*
         version: link:../core
-      '@modernrelay/notebook-fixture':
-        specifier: workspace:*
-        version: link:../fixture
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

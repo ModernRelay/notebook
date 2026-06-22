@@ -1,6 +1,6 @@
 import React from "react";
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 // When stdin isn't a TTY (CI, piped runs, smoke tests), Ink + @json-render/ink
 // throw inside `useInput` because raw mode isn't available. We stub the few
@@ -24,8 +24,6 @@ if (RAN_NON_TTY) {
 
 import { render } from "ink";
 import { parseNotebook } from "@modernrelay/notebook-core";
-import { FixtureSource } from "@modernrelay/notebook-fixture";
-import { loadFixture } from "@modernrelay/notebook-fixture/node";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
 import type { Source } from "@modernrelay/notebook-core";
 import { App } from "./App.js";
@@ -68,14 +66,11 @@ function printUsage(): void {
   process.stderr.write(`
 omnigraph-tui <notebook.yaml> [--server URL] [--token TOKEN] [--branch NAME] [--graph ID]
 
-  Fixture mode  — when the notebook declares \`fixture: <relative-path>\`,
-                  reads + writes go to the in-memory FixtureSource.
-  Server mode   — when the notebook declares \`server: <URL>\` (or you pass
-                  --server), reads + writes go to omnigraph-server. Bearer
-                  token from --token or \$OMNIGRAPH_TOKEN. omnigraph-server
-                  0.7.0+ is cluster-only, so a graph id is required: set
-                  \`graph:\` in the notebook, pass --graph, or set
-                  \$OMNIGRAPH_GRAPH_ID.
+  Reads + writes go to omnigraph-server (via the @modernrelay/omnigraph SDK)
+  when the notebook declares \`server: <URL>\` (or you pass --server). Bearer
+  token from --token or \$OMNIGRAPH_TOKEN. omnigraph-server 0.7.0+ is
+  cluster-only, so a graph id is required: set \`graph:\` in the notebook,
+  pass --graph, or set \$OMNIGRAPH_GRAPH_ID.
 
 `);
 }
@@ -104,12 +99,7 @@ export function main(argv: readonly string[]): void {
   let source: Source;
   let label: string;
 
-  if (notebook.fixture) {
-    const fixturePath = resolve(dirname(notebookAbs), notebook.fixture);
-    const fixture = loadFixture(fixturePath);
-    source = new FixtureSource(fixture);
-    label = `fixture: ${notebook.fixture}`;
-  } else if (serverUrl) {
+  if (serverUrl) {
     if (!graphId) {
       process.stderr.write(
         `omnigraph-tui: server mode requires a graph id (omnigraph-server 0.7.0+\n` +
@@ -129,8 +119,7 @@ export function main(argv: readonly string[]): void {
     label = `server: ${serverUrl} · graph: ${graphId}`;
   } else {
     process.stderr.write(
-      `omnigraph-tui: notebook has neither \`fixture:\` nor \`server:\`,\n` +
-        `and no --server flag was given. Set one of the three.\n`,
+      `omnigraph-tui: notebook has no \`server:\` and no --server flag was given.\n`,
     );
     process.exit(2);
   }

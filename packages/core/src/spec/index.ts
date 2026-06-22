@@ -30,8 +30,8 @@ export type ActionBinding = z.infer<typeof ActionBindingSchema>;
 
 // ── Mutation DSL ──────────────────────────────────────────────────────────
 // Declarative atomic mutations dispatched by ActionList per-row buttons.
-// The substrate (FixtureSource in dev, omnigraph-server `POST /change` in
-// prod) executes one mutation per click. Cell authors declare the shape;
+// The substrate (omnigraph-server `POST /change`, via the SDK) executes one
+// mutation per click. Cell authors declare the shape;
 // the lens fills `target_id` from the row at click time.
 
 const SetFieldMutationSchema = z.object({
@@ -59,10 +59,11 @@ export interface MutationResult {
   kind: "ok";
 }
 
-// ── Fixture-mode query DSL ────────────────────────────────────────────────
-// Used when a notebook declares a top-level `fixture` path. The cell's
-// `query.fixture` carries a structured query that the in-memory runner
-// evaluates against the loaded JSON graph. See @modernrelay/notebook-fixture.
+// ── Structured query DSL (interim) ────────────────────────────────────────
+// A cell's `query.fixture` carries a structured query (nodes/path/ego) that
+// `@modernrelay/notebook-client` compiles to `.gq` for omnigraph-server. The
+// `fixture` name is historical; this is slated to become a predefined-query
+// reference (`query.ref`). See dash-books-canon.md §4.
 
 const FixtureNodesQuerySchema = z.object({
   kind: z.literal("nodes"),
@@ -152,7 +153,8 @@ const QuerySchema = z
     params: z.record(z.string(), z.unknown()).optional(),
     branch: z.string().optional(),
     snapshot: z.string().optional(),
-    // Fixture mode — used when notebook declares a top-level `fixture`.
+    // Structured query DSL (nodes/path/ego), compiled to `.gq` for the
+    // server. Interim — to become a predefined-query `ref` (canon §4).
     fixture: FixtureQuerySchema.optional(),
   })
   .refine(
@@ -227,8 +229,6 @@ export type Cell = z.infer<typeof CellSchema>;
 export const NotebookSchema = z.object({
   version: z.literal(1),
   title: z.string().min(1),
-  /** Path to a JSON fixture (relative to the notebook). When set, runs in fixture mode. */
-  fixture: z.string().min(1).optional(),
   /** omnigraph-server base URL when running in server mode. CLI flag overrides. */
   server: z.url().optional(),
   /**

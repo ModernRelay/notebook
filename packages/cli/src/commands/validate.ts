@@ -40,13 +40,11 @@ export function validateCommand(argv: string[]): number {
     return 1;
   }
 
-  // Structural parse passed. Capability-check against a source when the notebook
-  // (or a --server flag) points at one — this also loads + validates the fixture.
+  // Structural parse passed. Capability-check against the source when the
+  // notebook (or a --server flag) points at an omnigraph-server.
   const result: ValidateResult = { ok: true, errors: [] };
   const sourceOpts = sourceOptionsFrom(values);
-  const hasSource = Boolean(
-    loaded.notebook.fixture || loaded.notebook.server || sourceOpts.server,
-  );
+  const hasSource = Boolean(loaded.notebook.server || sourceOpts.server);
   if (hasSource) {
     try {
       const { source } = buildSource(loaded, sourceOpts);

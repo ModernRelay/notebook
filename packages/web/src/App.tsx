@@ -216,7 +216,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
                 </kbd>
               </Button>
               <Badge variant="outline" className="font-mono uppercase">
-                {config.mode}
+                server
               </Badge>
             </div>
           </div>

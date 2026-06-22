@@ -102,8 +102,8 @@ export const lensActions = {
     description: "Write a value to the state model at the given JSON pointer.",
   },
   /**
-   * Atomic mutation against the underlying source (FixtureSource in dev,
-   * HTTP client to omnigraph-server in prod). Each invocation is one
+   * Atomic mutation against omnigraph-server (via the @modernrelay/omnigraph
+   * SDK). Each invocation is one
    * commit. The cell author declares the mutation shape via
    * ActionList.actions[*].mutation; the lens fills target_id from the
    * row at click time.

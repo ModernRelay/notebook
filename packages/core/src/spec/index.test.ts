@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 import { parseNotebook } from "./index.js";
 
 describe("parseNotebook", () => {
-  it("parses a fixture-mode notebook", () => {
+  it("parses a server-mode notebook", () => {
     const yaml = `
 version: 1
 title: Demo
-fixture: ./fixtures/x.json
+server: http://127.0.0.1:8080
+graph: company
 cells:
   - id: t
     lens: Table
@@ -15,7 +16,8 @@ cells:
     props: { columns: [{ key: id, label: ID }] }
 `;
     const nb = parseNotebook(yaml);
-    expect(nb.fixture).toBe("./fixtures/x.json");
+    expect(nb.server).toBe("http://127.0.0.1:8080");
+    expect(nb.graph).toBe("company");
     expect(nb.cells).toHaveLength(1);
     expect(nb.cells[0]?.query.fixture?.kind).toBe("nodes");
   });

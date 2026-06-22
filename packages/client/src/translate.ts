@@ -1,7 +1,8 @@
 /**
- * Pure translators from the fixture-DSL (the same DSL that powers
- * `@modernrelay/notebook-fixture`'s in-memory runner) into the parameterized `.gq`
- * source that omnigraph-server speaks.
+ * Pure translators from the structured query DSL (cells' `query.fixture`:
+ * nodes/path/ego) into the parameterized `.gq` source that omnigraph-server
+ * speaks. Interim — to be superseded by predefined-query references
+ * (`query.ref`); see dash-books-canon.md §4.
  *
  * Output shape for every translator:
  *   { query_source: string, query_name: string, params: Record<string, unknown> }

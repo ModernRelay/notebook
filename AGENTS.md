@@ -6,12 +6,12 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Turn an OmniGraph graph database into a **read-and-act dashboard you describe in one YAML file** — rendered identically in a terminal and a browser.
 
-Normally you inspect a graph by writing queries and reading JSON, or by building a bespoke UI. A notebook is the layer between: a YAML file that *declares what slices of the graph to show and what actions to allow*, not code. Each cell is a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) fed by a structured query, or a control (`Select`/`Toggle`/`Button`) that filters state or mutates the graph. See `examples/company.notebook.yaml`: a status filter, a decisions table, a `Signal → Decision → Actor` path, an ego subgraph, and a clause list with inline Approve/Reject buttons — no UI code anywhere.
+Normally you inspect a graph by writing queries and reading JSON, or by building a bespoke UI. A notebook is the layer between: a YAML file that *declares what slices of the graph to show and what actions to allow*, not code. Each cell is a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) fed by a structured query, or a control (`Select`/`Toggle`/`Button`) that filters state or mutates the graph. See `examples/company-server.notebook.yaml`: a status filter, a decisions table, a `Signal → Decision → Actor` path, an ego subgraph, and a clause list with inline Approve/Reject buttons — no UI code anywhere.
 
 Two bets make it work:
 
 - **Typed lenses, not a generic graph viewer** — you name the view you want; the system renders it.
-- **Write once, render anywhere** — the same YAML drives the Ink terminal UI and the React web UI, against an in-memory fixture (dev) or a live omnigraph-server (prod). It's bidirectional: lenses read the graph, controls and actions write back to it.
+- **Write once, render anywhere** — the same YAML drives the Ink terminal UI and the React web UI, against a live omnigraph-server (a local cluster in dev, a remote server in prod). It's bidirectional: lenses read the graph, controls and actions write back to it.
 
 ## Commands
 
@@ -27,8 +27,7 @@ pnpm --filter @modernrelay/notebook-<pkg> build             # rebuild one packag
 pnpm --filter @modernrelay/notebook-<pkg> test              # vitest run for one package
 pnpm --filter @modernrelay/notebook-<pkg> test -- <pattern> # single test file/name
 
-pnpm tui examples/company.notebook.yaml          # Ink TUI, fixture mode
-pnpm tui examples/company-server.notebook.yaml   # TUI, server mode — server URL + graph id
+pnpm tui examples/company-server.notebook.yaml   # Ink TUI, server mode — server URL + graph id
                                                  #   come from the notebook (run server-demo.sh first)
 pnpm --filter @modernrelay/notebook-web dev                 # Vite dev server at 127.0.0.1:5173
                                                  #   add ?mode=server&server=/og (same-origin proxy)
@@ -42,15 +41,14 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 
 ## Architecture
 
-**One catalog, two renderers, one fixture-driven dev loop.** A notebook is YAML; each cell renders as a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) or a control (`Button`/`Toggle`/`Select`). Both the Ink TUI and the React Web app share the same catalog of component definitions and the same runtime; only the leaf component implementations and the host shell differ.
+**One catalog, two renderers, one server-backed runtime.** A notebook is YAML; each cell renders as a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) or a control (`Button`/`Toggle`/`Select`). Both the Ink TUI and the React Web app share the same catalog of component definitions and the same runtime; only the leaf component implementations and the host shell differ.
 
 ### Package map
 
 | Package | Role |
 |---|---|
-| `@modernrelay/notebook-core` | The engine — start here. One package, three internal modules: `spec` (Zod schemas + YAML parser, fixture-query DSL, mutation specs), `catalog` (component+action definitions shared by both renderers; `assembleLensSpec` / `assembleControlSpec` produce json-render specs), `runtime` (capability-aware execution, state mirror, dependency invalidation, action dispatch, mutation lifecycle, optimistic reconciliation). The `@json-render/core` analog. |
-| `@modernrelay/notebook-fixture` | In-memory `FixtureSource` over JSON graphs; `/node` subpath holds the Node-only fs loader so it stays out of the browser bundle. |
-| `@modernrelay/notebook-client` | `ServerSource` + `translateFixtureQuery` / `translateMutation` (fixture DSL → `.gq`) + a `Client` facade over the `@modernrelay/omnigraph` SDK (`/query` + `/mutate`, graph-scoped). |
+| `@modernrelay/notebook-core` | The engine — start here. One package, three internal modules: `spec` (Zod schemas + YAML parser, structured query DSL, mutation specs), `catalog` (component+action definitions shared by both renderers; `assembleLensSpec` / `assembleControlSpec` produce json-render specs), `runtime` (capability-aware execution, state mirror, dependency invalidation, action dispatch, mutation lifecycle, optimistic reconciliation). The `@json-render/core` analog. |
+| `@modernrelay/notebook-client` | **The only data source.** `ServerSource` + `translate` (structured DSL → `.gq`) + a `Client` facade over the `@modernrelay/omnigraph` SDK (`/query` + `/mutate`, graph-scoped). |
 | `@modernrelay/notebook-tui` | Ink renderer + CLI entry (`bin/omnigraph-tui.js`); host shell for terminal. |
 | `@modernrelay/notebook-web` | Vite + React + Tailwind renderer; host shell for browser. |
 | `@modernrelay/notebook` (`packages/cli`) | The published front-door CLI. Bundles every `@modernrelay/notebook-*` lib (tsup, `noExternal`) and ships the built web SPA in `web-dist/`. Subcommands: `view` (browser — static server + `/og` BFF proxy with server-side token injection, reusing `web/src/config.ts`'s URL-param contract), `tui` (calls `@modernrelay/notebook-tui` `main`), `validate`/`render`/`catalog`/`schema` (agent-DX, JSON out; schema via Zod 4 `z.toJSONSchema`). The workspace root is the private `notebook-workspace`; `@modernrelay/notebook` is the CLI, not the root. |
@@ -62,22 +60,21 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
                          │                            │
                          ▼                            ▼
                  Source.capabilities/read/mutate   assembleLensSpec()
-                 (Fixture | Server)                → json-render Spec
+                 (ServerSource)                    → json-render Spec
 ```
 
-1. `@modernrelay/notebook-core`'s `spec` module parses+validates YAML against frozen v1 Zod schemas. Defines the `FixtureQuery` DSL (`nodes` / `path` / `ego`) and the `MutationSpec` discriminated union (currently only `set_field`).
+1. `@modernrelay/notebook-core`'s `spec` module parses+validates YAML against frozen v1 Zod schemas. Defines the structured query DSL (`nodes` / `path` / `ego`) and the `MutationSpec` discriminated union (currently only `set_field`).
 2. `@modernrelay/notebook-core`'s `createNotebookRuntime` validates notebook compatibility against `Source.capabilities()`, resolves `{ $state: "/ptr" }` expressions for data reads, invalidates only cells whose query dependencies changed, calls `Source.read()`, and hands results to `assembleLensSpec` (core's `catalog` module). Control cells skip reads and pass props through to `assembleControlSpec`. Per-cell errors are captured on `CellExecution.error`; runtime-level compatibility failures surface on `RuntimeSnapshot.error`.
 3. core's `catalog` module exports `lensComponents` (Zod prop schemas + descriptions) and `lensActions` (`setState`, `mutate`). Author-time props are validated here; the renderer's `defineCatalog` consumes the same schemas.
 4. The renderer (`packages/tui` or `packages/web`) calls `defineRegistry` against its UI library, supplying concrete Ink or React+Tailwind component implementations under the same component IDs (`Table`, `Path`, ...). The App subscribes to the runtime snapshot and passes each cell's `LensSpec` to `<Renderer />`.
 
-### The `Source` interface and its two implementations
+### The `Source` interface and its implementation
 
-Defined in `@modernrelay/notebook-core` (its `runtime` module) as a capability-aware contract: `capabilities()`, `read(request, context)`, and `mutate(command, context)`. The notebook YAML is identical between modes where source capabilities overlap; unsupported features fail during runtime compatibility validation or with explicit source errors:
+Defined in `@modernrelay/notebook-core` (its `runtime` module) as a capability-aware contract: `capabilities()`, `read(request, context)`, and `mutate(command, context)`. There is one implementation; unsupported features fail during runtime compatibility validation or with explicit source errors:
 
-- **`FixtureSource`** (`@modernrelay/notebook-fixture`): runs the fixture-DSL query against an in-memory JSON graph; mutations update nodes in place per-process (no disk writeback).
-- **`ServerSource`** (`@modernrelay/notebook-client`): translates fixture-DSL queries to `.gq` source via `translateFixtureQuery`/`translateMutation` and calls the SDK's `query`/`mutate` (omnigraph-server 0.7.0+ serves these under `/graphs/{graph}/…`). `ego` queries are decomposed into center/incident reads and merged client-side. Cells may still bypass translation by setting deprecated `query.source` raw `.gq`.
+- **`ServerSource`** (`@modernrelay/notebook-client`): the only source. Translates the structured DSL (`nodes`/`path`/`ego`) to `.gq` via `translateFixtureQuery`/`translateMutation` and calls the SDK's `query`/`mutate` (omnigraph-server 0.7.0+ serves these under `/graphs/{graph}/…`). `ego` queries are decomposed into center/incident reads and merged client-side. Cells may bypass translation with deprecated `query.source` raw `.gq`. *(Target: cells reference predefined catalog queries by `ref` — see `dash-books-canon.md`.)*
 
-Mode selection: `tui/src/index.tsx` and `web/src/App.tsx` pick a source from `notebook.fixture` (relative JSON path) vs `notebook.server` (URL), with CLI flags or URL flags (`?mode=server|fixture`, `?server=...`, `?notebook=...`) as overrides.
+Connection: `tui/src/index.tsx`, `web/src/config.ts`, and `cli/src/source.ts` build a `ServerSource` from `notebook.server` + `graph` (cluster id), with CLI flags or URL flags (`?server=...`, `?graph=...`, `?notebook=...`) as overrides.
 
 ### State + mutations
 
@@ -95,7 +92,7 @@ A data cell may additionally declare inline `controls: [...]` — control descri
 
 ### TypeScript config
 
-Strict mode + `noUncheckedIndexedAccess`. All packages extend `tsconfig.base.json` and emit `dist/` with declaration files; consumers import from `@modernrelay/notebook-<pkg>` (resolves to `dist/index.js`). The `@modernrelay/notebook-fixture/node` subpath splits Node-only fs loaders out of the browser bundle.
+Strict mode + `noUncheckedIndexedAccess`. All packages extend `tsconfig.base.json` and emit `dist/` with declaration files; consumers import from `@modernrelay/notebook-<pkg>` (resolves to `dist/index.js`).
 
 ## Server-mode prerequisites
 
