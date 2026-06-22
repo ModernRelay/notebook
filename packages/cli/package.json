@@ -9,7 +9,8 @@
   },
   "bin": {
     "notebook": "./dist/cli.js",
-    "mr-notebook": "./dist/cli.js"
+    "mr-notebook": "./dist/cli.js",
+    "omnigraph-notebook": "./dist/cli.js"
   },
   "files": [
     "dist",
