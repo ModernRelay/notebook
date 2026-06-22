@@ -134,8 +134,8 @@ export function App({
         </Box>
 
         {/* Tab strip: all cells, active highlighted. The TUI is layout-flat:
-            it ignores a cell's `display: drawer|modal` (a web-only layout tier)
-            and renders every cell as an inline tab. */}
+            it ignores a cell's `display: drawer|modal` and `width` (web-only
+            layout tiers) and renders every cell as a full inline tab. */}
         {cellCount > 0 && (
           <Box marginTop={1}>
             {cells.map((c, i) => (

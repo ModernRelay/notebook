@@ -9,6 +9,7 @@ export const LensKind = z.enum([
   "ActionList",
   "Timeline",
   "Card",
+  "Quote",
 ]);
 export type LensKind = z.infer<typeof LensKind>;
 
@@ -24,6 +25,7 @@ export const ComponentKind = z.enum([
   "ActionList",
   "Timeline",
   "Card",
+  "Quote",
   "Button",
   "Toggle",
   "Select",
@@ -163,6 +165,13 @@ export const CellSchema = z
      * Table writes via `select_state` (e.g. "/selected").
      */
     open_state: z.string().optional(),
+    /**
+     * In-flow layout width (host-shell layout tier, web-first). The web host
+     * arranges inline cells in a responsive 6-column grid; this sets the cell's
+     * column span — `full` (default, own row), `two-thirds`, `half`, `third`.
+     * Cells flow left-to-right and wrap. The TUI ignores this (one cell per tab).
+     */
+    width: z.enum(["full", "half", "third", "two-thirds"]).optional(),
   })
   .strict()
   .refine(

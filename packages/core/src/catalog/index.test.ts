@@ -17,12 +17,13 @@ const fakeResult: QueryResult = {
 };
 
 describe("lensComponents", () => {
-  it("registers all nine components (6 lenses + 3 controls)", () => {
+  it("registers all ten components (7 lenses + 3 controls)", () => {
     expect(Object.keys(lensComponents).sort()).toEqual([
       "ActionList",
       "Button",
       "Card",
       "Path",
+      "Quote",
       "Select",
       "Subgraph",
       "Table",
@@ -54,12 +55,29 @@ describe("assembleLensSpec", () => {
     );
   });
 
+  it("builds a Quote spec with rows merged in", () => {
+    const spec = assembleLensSpec(
+      "q1",
+      "Quote",
+      { text_column: "from", source_column: "to", meta_columns: ["p1"] },
+      fakeResult,
+    );
+    expect(spec.elements["q1"]?.type).toBe("Quote");
+    expect((spec.elements["q1"]?.props as { rows: unknown[] }).rows).toEqual(
+      fakeResult.rows,
+    );
+  });
+
   it("rejects malformed author props", () => {
     expect(() =>
       assembleLensSpec("bad", "Table", { columns: [] }, fakeResult),
     ).toThrow();
     expect(() =>
       assembleLensSpec("bad", "Path", { steps: [] }, fakeResult),
+    ).toThrow();
+    // Quote: meta_columns entries must be non-empty.
+    expect(() =>
+      assembleLensSpec("bad", "Quote", { meta_columns: [""] }, fakeResult),
     ).toThrow();
   });
 });

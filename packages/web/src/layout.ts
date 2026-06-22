@@ -1,12 +1,33 @@
-import type { CellExecution } from "@modernrelay/notebook-core";
+import type { Cell, CellExecution } from "@modernrelay/notebook-core";
 
 /**
  * Layout tier (web host shell). Cells default to an inline vertical stack; a
  * cell with `display: drawer|modal` + an `open_state` pointer lifts into an
- * overlay that is open while that pointer is truthy in runtime state. This
- * module holds the pure partition/pointer logic so it stays unit-testable apart
- * from the React shell. See dash-books-canon.md §4.4.
+ * overlay that is open while that pointer is truthy in runtime state, and a
+ * cell's `width` sets its span in the inline responsive grid. This module holds
+ * the pure partition/pointer/width logic so it stays unit-testable apart from
+ * the React shell. See dash-books-canon.md §4.4.
  */
+
+/**
+ * Map a cell `width` to its Tailwind column span in the inline 6-column grid
+ * (`md:grid-cols-6`). Returns **complete literal class strings** from a lookup
+ * (never interpolated) so the Tailwind JIT scanner emits them. `full`/absent →
+ * a whole row; `two-thirds`/`half`/`third` divide the 6 columns evenly.
+ */
+export function widthToColSpan(width: Cell["width"]): string {
+  switch (width) {
+    case "two-thirds":
+      return "md:col-span-4";
+    case "half":
+      return "md:col-span-3";
+    case "third":
+      return "md:col-span-2";
+    case "full":
+    case undefined:
+      return "md:col-span-6";
+  }
+}
 
 /** An overlay (drawer/modal) is open while its `openState` pointer is truthy. */
 export interface OverlayGroup {

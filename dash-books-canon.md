@@ -11,7 +11,7 @@
 one typed result contract in a browser and a terminal.**
 
 A "dash-book" is a notebook: a YAML document whose cells are typed **lenses** (`Table`, `Path`,
-`Subgraph`, `ActionList`) and **controls** (`Button`, `Toggle`, `Select`). You declare *what slice of
+`Subgraph`, `ActionList`, `Timeline`, `Card`, `Quote`) and **controls** (`Button`, `Toggle`, `Select`). You declare *what slice of
 the graph to show and what actions to allow*; you never write UI code. The same YAML drives a
 React/Tailwind web renderer and an Ink terminal renderer from one shared result contract. The browser
 is the first-class rich renderer; the terminal is a useful degradation over the same data and action
@@ -284,6 +284,15 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
             the drawer/modal (`web/src/layout.ts` `partitionCells` + `components/ui/drawer.tsx`); the TUI is
             layout-flat and renders every cell inline. Lenses (Timeline, Card, wrap, click-to-select) landed
             alongside.
+      - [x] **2D (first slice) — in-flow layout grid.** Cell `width: full|half|third|two-thirds` sets the
+            cell's span in the web host's responsive 6-column inline grid (`web/src/layout.ts`
+            `widthToColSpan` → literal `md:col-span-*`; `App.tsx` inline stack → `grid md:grid-cols-6`).
+            Default `full` = the old single-column stack; halves/thirds sit side-by-side (two-pane
+            master-detail, KPI rows). Complements 2A's overlay tier; host-shell only, TUI ignores it (one
+            cell per tab). Collapses to one column below `md`.
+      - [x] **Quote lens.** Renders rows as a blockquote feed — `text_column` + a `source_column · meta…`
+            citation (`refs/r2.jpg`) — for highlights/annotations/comments. Utterance-centric, distinct from
+            Timeline (event feed). Replaces the cramped 2-column highlights table; web + Ink renderers.
 - [ ] Extend the catalog by in-tree, reviewed contribution (no third-party/sandboxed lenses); TUI
       renderer or table fallback per component.
 - [ ] Explicit dependency DAG (inputs, controls, query params, reads, cells) — no client expression layer.

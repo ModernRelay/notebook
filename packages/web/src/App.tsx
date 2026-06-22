@@ -38,7 +38,7 @@ import {
   type CommandSection,
 } from "./components/CommandPalette.js";
 import { useHotkeys, type Hotkey } from "./lib/hotkeys.js";
-import { partitionCells, readPointer } from "./layout.js";
+import { partitionCells, readPointer, widthToColSpan } from "./layout.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -243,7 +243,11 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
             const { inline, overlays } = partitionCells(snapshot.cells);
             return (
               <>
-                <div className="space-y-6">
+                {/* Inline cells flow in a responsive 6-column grid; each cell
+                    spans per its `width` (default full = its own row, so the
+                    no-width case is the old single-column stack). Collapses to
+                    one column below md. */}
+                <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-6">
                   {inline.map((cell) => (
                     <CellCard key={cell.cell.id} cell={cell} />
                   ))}
@@ -381,7 +385,11 @@ function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
   return (
     <Card
       id={cell.cell.id}
-      className={cn("scroll-mt-10", isControl && "bg-card/60")}
+      className={cn(
+        "scroll-mt-10",
+        widthToColSpan(cell.cell.width),
+        isControl && "bg-card/60",
+      )}
     >
       <CardHeader>
         <CardTitle className="text-base">

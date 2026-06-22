@@ -170,6 +170,34 @@ cells:
     ).toThrow();
   });
 
+  it("parses a cell's layout-grid width", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Grid
+cells:
+  - id: a
+    lens: Table
+    query: { ref: q }
+    width: half
+    props: { columns: [{ key: x, label: X }] }
+`);
+    expect(nb.cells[0]?.width).toBe("half");
+  });
+
+  it("rejects an unknown width (enum)", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Table
+    query: { ref: q }
+    width: quarter
+`),
+    ).toThrow();
+  });
+
   it("rejects a Table cell without a query", () => {
     expect(() =>
       parseNotebook(`

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { CellExecution } from "@modernrelay/notebook-core";
-import { partitionCells, readPointer } from "./layout.js";
+import { partitionCells, readPointer, widthToColSpan } from "./layout.js";
 
 /** Minimal CellExecution stub — partitionCells only reads `cell.cell`. */
 function cell(
@@ -73,5 +73,18 @@ describe("readPointer", () => {
   it("returns the whole state for the empty pointer", () => {
     const state = { x: 1 };
     expect(readPointer(state, "")).toBe(state);
+  });
+});
+
+describe("widthToColSpan", () => {
+  it("maps each width to its literal 6-col span class", () => {
+    expect(widthToColSpan("two-thirds")).toBe("md:col-span-4");
+    expect(widthToColSpan("half")).toBe("md:col-span-3");
+    expect(widthToColSpan("third")).toBe("md:col-span-2");
+    expect(widthToColSpan("full")).toBe("md:col-span-6");
+  });
+
+  it("defaults absent width to a full row", () => {
+    expect(widthToColSpan(undefined)).toBe("md:col-span-6");
   });
 });
