@@ -2,14 +2,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { Client, ServerSource } from "@modernrelay/notebook-client";
+import { resolveConnection as resolveOperatorConnection } from "@modernrelay/notebook-client/node";
 import { parseNotebook, type Notebook } from "@modernrelay/notebook-core";
 import type { Source } from "@modernrelay/notebook-core";
 
 export interface SourceOptions {
+  /** `--server` — operator-config server name or a literal URL. */
   server?: string;
   token?: string;
   branch?: string;
   graph?: string;
+  /** `--profile` — named operator-config profile. */
+  profile?: string;
 }
 
 export interface LoadedNotebook {
@@ -25,9 +29,9 @@ export function loadNotebook(notebookPath: string): LoadedNotebook {
   return { notebook: parseNotebook(yaml), notebookPath: abs };
 }
 
-/** Resolved connection params — the single source of truth for source selection. */
+/** Resolved connection — the single source of truth for source selection. */
 export interface Connection {
-  /** Upstream omnigraph-server URL. */
+  /** Resolved omnigraph-server base URL. */
   server: string;
   token?: string;
   graphId: string;
@@ -36,38 +40,38 @@ export interface Connection {
 }
 
 /**
- * Resolve the omnigraph-server connection from a notebook + CLI/env options —
- * the same selection the TUI uses (packages/tui/src/index.tsx). Server-mode
- * graph-id precedence: flag → $OMNIGRAPH_GRAPH_ID → notebook. No I/O.
+ * Resolve the omnigraph-server connection by layering CLI flags over the
+ * omnigraph operator config (`~/.omnigraph/config.yaml` + `credentials`) and
+ * the notebook's declared `server`/`graph`. Shared with the TUI via
+ * `@modernrelay/notebook-client/node`. No graph I/O.
  */
 export function resolveConnection(
   loaded: LoadedNotebook,
   opts: SourceOptions,
 ): Connection {
-  const { notebook } = loaded;
-  const server = opts.server ?? notebook.server;
-  if (!server) {
-    throw new Error(
-      "notebook has no `server:` (and no --server given)",
-    );
-  }
-  const token =
-    opts.token ??
-    process.env.OMNIGRAPH_TOKEN ??
-    process.env.OMNIGRAPH_BEARER_TOKEN;
-  const graphId = opts.graph ?? process.env.OMNIGRAPH_GRAPH_ID ?? notebook.graph;
-  if (!graphId) {
-    throw new Error(
-      "server mode requires a graph id (omnigraph-server 0.7.0+ is cluster-only) — " +
-        "set `graph:` in the notebook, pass --graph <id>, or set $OMNIGRAPH_GRAPH_ID",
-    );
-  }
+  const r = resolveOperatorConnection(
+    {
+      ...(opts.server !== undefined ? { server: opts.server } : {}),
+      ...(opts.graph !== undefined ? { graph: opts.graph } : {}),
+      ...(opts.token !== undefined ? { token: opts.token } : {}),
+      ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+      ...(opts.profile !== undefined ? { profile: opts.profile } : {}),
+    },
+    {
+      ...(loaded.notebook.server !== undefined
+        ? { server: loaded.notebook.server }
+        : {}),
+      ...(loaded.notebook.graph !== undefined
+        ? { graph: loaded.notebook.graph }
+        : {}),
+    },
+  );
   return {
-    server,
-    graphId,
-    label: `server: ${server} · graph: ${graphId}`,
-    ...(token !== undefined ? { token } : {}),
-    ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+    server: r.baseUrl,
+    graphId: r.graphId,
+    label: r.label,
+    ...(r.token !== undefined ? { token: r.token } : {}),
+    ...(r.branch !== undefined ? { branch: r.branch } : {}),
   };
 }
 
