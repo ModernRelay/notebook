@@ -16,6 +16,7 @@ import {
   OmnigraphError,
   type QueryInput as SdkQueryInput,
   type MutationInput as SdkMutationInput,
+  type Read as SdkRead,
 } from "@modernrelay/omnigraph";
 
 export interface ClientOptions {
@@ -133,6 +134,41 @@ export class Client {
       };
     } catch (e) {
       throw toHttpError(e, "/query");
+    }
+  }
+
+  /**
+   * Invoke a server-owned catalog query by name (`POST /queries/{name}`). The
+   * query body lives in the cluster registry, not here — we pass only runtime
+   * inputs. `expectMutation: false` asserts a read (the server rejects a stored
+   * mutation), so the untagged `Read | Change` response is a read envelope.
+   */
+  async invoke(
+    name: string,
+    input: { params?: Record<string, unknown>; branch?: string; snapshot?: string },
+    signal?: AbortSignal,
+  ): Promise<ReadOutput> {
+    this.requireGraph(`/queries/${name}`);
+    try {
+      const r = (await this.og.queries.invoke(
+        name,
+        {
+          expectMutation: false,
+          ...(input.params !== undefined ? { params: input.params } : {}),
+          ...(input.branch !== undefined ? { branch: input.branch } : {}),
+          ...(input.snapshot !== undefined ? { snapshot: input.snapshot } : {}),
+        },
+        signal ? { signal } : {},
+      )) as SdkRead;
+      return {
+        query_name: r.queryName,
+        target: r.target?.branch ?? r.target?.snapshot ?? "main",
+        row_count: r.rowCount,
+        columns: r.columns ?? [],
+        rows: (r.rows ?? []) as Record<string, unknown>[],
+      };
+    } catch (e) {
+      throw toHttpError(e, `/queries/${name}`);
     }
   }
 

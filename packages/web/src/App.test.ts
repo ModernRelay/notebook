@@ -29,8 +29,7 @@ graph: acme
 cells:
   - id: rows
     lens: Table
-    query:
-      fixture: { kind: nodes, where: { type: Decision } }
+    query: { ref: decisions_by_urgency }
     props: { columns: [{ key: id, label: ID }] }
 `);
       }

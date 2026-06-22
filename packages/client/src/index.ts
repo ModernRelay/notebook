@@ -10,11 +10,7 @@ export {
 } from "./http.js";
 
 export {
-  translateFixtureQuery,
-  translateNodesQuery,
-  translatePathQuery,
   translateMutation,
-  edgeToPredicate,
   UnsupportedTranslationError,
   type TranslatedQuery,
 } from "./translate.js";

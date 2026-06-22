@@ -1,4 +1,4 @@
-import type { Cell, FixtureQuery, Notebook } from "../spec/index.js";
+import type { Notebook } from "../spec/index.js";
 import { isControl } from "./controls.js";
 
 /** Map each data cell to the set of `$state` JSON pointers its query reads. */
@@ -9,8 +9,6 @@ export function dependencyMap(notebook: Notebook): Map<string, Set<string>> {
     const deps = new Set<string>();
     if (cell.query.params !== undefined)
       collectStatePointers(cell.query.params, deps);
-    if (cell.query.fixture !== undefined)
-      collectStatePointers(cell.query.fixture, deps);
     out.set(cell.id, deps);
   }
   return out;
@@ -38,44 +36,6 @@ export function resolveParams(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
     out[key] = resolveExpr(value, state);
-  }
-  return out;
-}
-
-export function resolveFixtureQuery(
-  query: FixtureQuery,
-  state: Record<string, unknown>,
-): FixtureQuery {
-  switch (query.kind) {
-    case "nodes":
-      return {
-        ...query,
-        ...(query.where !== undefined
-          ? { where: resolveWhere(query.where, state) }
-          : {}),
-      };
-    case "ego":
-      return {
-        ...query,
-        center: {
-          ...query.center,
-          where: resolveWhere(query.center.where, state),
-        },
-      };
-    case "path":
-      return query;
-  }
-}
-
-function resolveWhere(
-  where: Record<string, unknown>,
-  state: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(where)) {
-    const resolved = resolveExpr(value, state);
-    if (resolved === null || resolved === undefined || resolved === "") continue;
-    out[key] = resolved;
   }
   return out;
 }

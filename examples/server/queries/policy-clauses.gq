@@ -1,0 +1,17 @@
+// Policy clauses for review — every clause with its parent policy.
+// Backs the `policy-clause-review` ActionList cell. `slug` is the @key
+// field; projected as `id` so the lens references rows by it (and the
+// mutation sends it back as `target_id`).
+query policy_clauses_for_review() {
+  match {
+    $p: Policy
+    $p hasClause $c
+  }
+  return {
+    $c.slug as id,
+    $c.title as title,
+    $c.text as body,
+    $c.status as status,
+    $p.slug as policy_id
+  }
+}

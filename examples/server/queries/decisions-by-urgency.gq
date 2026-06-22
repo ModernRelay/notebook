@@ -1,0 +1,15 @@
+// All decisions, ordered by urgency. Backs the `decisions-by-urgency` Table.
+// v1 is param-free (returns every decision); status-filtered variants arrive
+// with the richer catalog-query work (dash-books-canon.md §4.3 / Phase 2).
+query decisions_by_urgency() {
+  match {
+    $d: Decision
+  }
+  return {
+    $d.slug as slug,
+    $d.title as title,
+    $d.status as status,
+    $d.urgency as urgency
+  }
+  order { $d.urgency asc }
+}

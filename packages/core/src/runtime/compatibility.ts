@@ -20,20 +20,17 @@ export function validateNotebookCompatibility(
   const warnings: string[] = [];
 
   for (const cell of notebook.cells) {
-    if (cell.query?.source !== undefined) {
+    if (cell.query?.ref !== undefined && !capabilities.namedQueries) {
+      errors.push(
+        `${cell.id}: selected source does not support named catalog queries (query.ref)`,
+      );
+    }
+    if (cell.query?.rawGq !== undefined) {
       warnings.push(
-        `${cell.id}: query.source raw .gq is deprecated; prefer query.fixture structured DSL`,
+        `${cell.id}: query.rawGq is a capability-gated escape hatch; prefer a catalog query.ref`,
       );
       if (!capabilities.rawGq) {
         errors.push(`${cell.id}: selected source does not support raw .gq`);
-      }
-    }
-    if (cell.query?.fixture !== undefined) {
-      const kind = cell.query.fixture.kind;
-      if (!capabilities.structuredQueryKinds.includes(kind)) {
-        errors.push(
-          `${cell.id}: selected source does not support ${kind} queries`,
-        );
       }
     }
     if (cell.query?.branch !== undefined && !capabilities.branchReads) {
