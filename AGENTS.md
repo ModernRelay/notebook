@@ -47,7 +47,7 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 
 | Package | Role |
 |---|---|
-| `@modernrelay/notebook-core` | The engine — start here. One package, three internal modules: `spec` (Zod schemas + YAML parser, structured query DSL, mutation specs), `catalog` (component+action definitions shared by both renderers; `assembleLensSpec` / `assembleControlSpec` produce json-render specs), `runtime` (capability-aware execution, state mirror, dependency invalidation, action dispatch, mutation lifecycle, optimistic reconciliation). The `@json-render/core` analog. |
+| `@modernrelay/notebook-core` | The engine — start here. One package, three internal modules: `spec` (Zod schemas + YAML parser, query model — `ref`/`rawGq` — mutation specs), `catalog` (component+action definitions shared by both renderers; `assembleLensSpec` / `assembleControlSpec` produce json-render specs), `runtime` (capability-aware execution, state mirror, dependency invalidation, action dispatch, mutation lifecycle, optimistic reconciliation). The `@json-render/core` analog. |
 | `@modernrelay/notebook-client` | **The only data source.** `ServerSource` + `translate` (structured DSL → `.gq`) + a `Client` facade over the `@modernrelay/omnigraph` SDK (`/query` + `/mutate`, graph-scoped). |
 | `@modernrelay/notebook-tui` | Ink renderer + CLI entry (`bin/omnigraph-tui.js`); host shell for terminal. |
 | `@modernrelay/notebook-web` | Vite + React + Tailwind renderer; host shell for browser. |
@@ -63,7 +63,7 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
                  (ServerSource)                    → json-render Spec
 ```
 
-1. `@modernrelay/notebook-core`'s `spec` module parses+validates YAML against frozen v1 Zod schemas. Defines the structured query DSL (`nodes` / `path` / `ego`) and the `MutationSpec` discriminated union (currently only `set_field`).
+1. `@modernrelay/notebook-core`'s `spec` module parses+validates YAML against frozen v1 Zod schemas. Defines the cell query model (`query.ref` → a server-owned catalog query, or `query.rawGq` raw `.gq` escape hatch) and the `MutationSpec` discriminated union (currently only `set_field`). The v1 schema is strict.
 2. `@modernrelay/notebook-core`'s `createNotebookRuntime` validates notebook compatibility against `Source.capabilities()`, resolves `{ $state: "/ptr" }` expressions for data reads, invalidates only cells whose query dependencies changed, calls `Source.read()`, and hands results to `assembleLensSpec` (core's `catalog` module). Control cells skip reads and pass props through to `assembleControlSpec`. Per-cell errors are captured on `CellExecution.error`; runtime-level compatibility failures surface on `RuntimeSnapshot.error`.
 3. core's `catalog` module exports `lensComponents` (Zod prop schemas + descriptions) and `lensActions` (`setState`, `mutate`). Author-time props are validated here; the renderer's `defineCatalog` consumes the same schemas.
 4. The renderer (`packages/tui` or `packages/web`) calls `defineRegistry` against its UI library, supplying concrete Ink or React+Tailwind component implementations under the same component IDs (`Table`, `Path`, ...). The App subscribes to the runtime snapshot and passes each cell's `LensSpec` to `<Renderer />`.
@@ -72,9 +72,9 @@ The TUI consumes built `dist/` from sibling workspace packages — **always run 
 
 Defined in `@modernrelay/notebook-core` (its `runtime` module) as a capability-aware contract: `capabilities()`, `read(request, context)`, and `mutate(command, context)`. There is one implementation; unsupported features fail during runtime compatibility validation or with explicit source errors:
 
-- **`ServerSource`** (`@modernrelay/notebook-client`): the only source. Translates the structured DSL (`nodes`/`path`/`ego`) to `.gq` via `translateFixtureQuery`/`translateMutation` and calls the SDK's `query`/`mutate` (omnigraph-server 0.7.0+ serves these under `/graphs/{graph}/…`). `ego` queries are decomposed into center/incident reads and merged client-side. Cells may bypass translation with deprecated `query.source` raw `.gq`. *(Target: cells reference predefined catalog queries by `ref` — see `dash-books-canon.md`.)*
+- **`ServerSource`** (`@modernrelay/notebook-client`): the only source. Invokes server-owned catalog queries by name via the SDK's `og.queries.invoke` (`query.ref`, the default path), or sends raw `.gq` ad-hoc via `og.query` (`query.rawGq` escape hatch). `mutate` compiles the interim `set_field` to `.gq`. omnigraph-server 0.7.0+ serves these under `/graphs/{graph}/…`.
 
-Connection: `tui/src/index.tsx`, `web/src/config.ts`, and `cli/src/source.ts` build a `ServerSource` from `notebook.server` + `graph` (cluster id), with CLI flags or URL flags (`?server=...`, `?graph=...`, `?notebook=...`) as overrides.
+Connection: `cli/src/source.ts` and `tui/src/index.tsx` resolve via the shared Node-only `@modernrelay/notebook-client/node` operator-config resolver (`~/.omnigraph/config.yaml` + `credentials`: named servers, profiles, keyed-token chain). Flags (`--server NAME|URL`/`--graph`/`--token`/`--branch`/`--profile`) and the notebook's `server`/`graph` layer in. `web/src/config.ts` stays on URL params + the `view` proxy — the browser can't read operator files.
 
 ### State + mutations
 
@@ -96,6 +96,6 @@ Strict mode + `noUncheckedIndexedAccess`. All packages extend `tsconfig.base.jso
 
 ## Server-mode prerequisites
 
-omnigraph-server 0.7.0+ is **cluster-only** (RFC-011): every read/write is served under `/graphs/{graph_id}/…`, so server-mode notebooks must carry a `graph:` id (overridable via `--graph`/`?graph=`/`$OMNIGRAPH_GRAPH_ID`). The SDK pins to a matching server line — `@modernrelay/omnigraph@^0.7.0` talks to a 0.7.x server only.
+omnigraph-server 0.7.0+ is **cluster-only** (RFC-011): every read/write is served under `/graphs/{graph_id}/…`, so server-mode notebooks must carry a `graph:` id (overridable via `--graph`/`?graph=` or the operator-config `default_graph`). The SDK pins to a matching server line — `@modernrelay/omnigraph@^0.7.0` talks to a 0.7.x server only.
 
 `scripts/server-demo.sh` needs an omnigraph **v0.7.0+** checkout on disk — the sibling `../omnigraph` by default, or set `OMNIGRAPH_REPO`. It `cargo build`s `omnigraph-cli` + `omnigraph-server` (release), then materializes a **local filesystem-backed cluster** under `.server-demo/cluster` (graph `company`, schema `examples/server/company.pg`, seed `examples/server/company.jsonl`) via `cluster import`/`apply` + `load`, and boots `omnigraph-server --cluster … --unauthenticated` on `:8080` (PID/log under `.server-demo/`, gitignored). No RustFS/S3 required. Re-running reuses the cluster (mutations persist); delete `.server-demo` to reset. The demo runs unauthenticated, so bearer tokens are ignored; the web app reaches it same-origin through the Vite `/og` proxy (the 0.7.0 server sets no CORS headers).

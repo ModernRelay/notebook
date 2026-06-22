@@ -255,17 +255,19 @@ strict, single-version schema is safe; no version negotiation or legacy-v1 suppo
 - [x] Consolidate spec + catalog + runtime → `@modernrelay/notebook-core`.
 - [x] **Delete fixture mode** (package, top-level selection, example fixtures, source-selection).
 **Phase 1 — read-only canon (v1).**
-- [ ] Cells reference catalog queries by `ref`; route `ServerSource.read` → `og.queries.invoke`; add
-      `ReadRequest.queryRef` plumbing; delete `translate.ts` + the `nodes`/`path`/`ego` DSL.
-- [ ] `rawGq` escape hatch: capability-gated, off by default, validation warns.
-- [ ] `notebook validate` against the catalog — `ref` resolves and params match `ParamDescriptor`s
-      (`og.queries.list()`).
-- [ ] Make the schema strict; reject stale fixture-mode keys (internal tool — no version support).
-- [ ] Operator-config connection client (shared Node resolver: config.yaml + credentials, named
-      servers, keyed tokens, profiles; browser uses the `view` proxy / dev config).
-- [ ] Render explicit lenses over named queries; web-only components degrade to a **table** in the TUI.
-- [ ] CLI DX: `--watch`, per-command help, `--version`, `omnigraph-notebook` bin alias.
-- [ ] Refresh CLAUDE.md / README.md / AGENTS.md / server-demo to the post-fixture, predefined-query model.
+- [x] Cells reference catalog queries by `ref`; `ServerSource.read` → `og.queries.invoke`;
+      `ReadRequest.queryRef` plumbing; deleted `translate.ts` read path + the `nodes`/`path`/`ego` DSL.
+- [x] `rawGq` escape hatch: capability-gated; validation warns.
+- [~] `notebook validate` parses + capability-checks; resolving `ref`/params against the live catalog
+      (`og.queries.list()`) is still TODO (needs a reachable server).
+- [x] Strict schema; rejects stale fixture-mode keys (internal tool — no version support).
+- [x] Operator-config connection client (shared `@modernrelay/notebook-client/node` resolver:
+      config.yaml + credentials, named servers, keyed tokens, profiles; browser uses the `view` proxy).
+- [x] Render explicit lenses over named queries; web-only components degrade to a table in the TUI.
+- [~] CLI DX: `--version`, per-command `--help`, `omnigraph-notebook` bin, `render --watch` done;
+      `view`/`tui` live-reload deferred.
+- [x] Refresh CLAUDE.md / README.md / AGENTS.md / server-demo to the post-fixture, predefined-query model.
+- [ ] End-to-end run against a live omnigraph cluster (`server-demo.sh` — cargo build + `og.queries.invoke`).
 
 **Cross-repo dependency for Phase 2 — declared query outputs (§4.3, decided: option a).** omnigraph
 extends the query catalog to declare output columns + types (`GET /queries`), mirroring params. Gates

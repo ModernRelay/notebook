@@ -36,9 +36,11 @@ notebook view my.notebook.yaml
 `view` serves the prebuilt SPA locally and, in server mode, reverse-proxies the
 omnigraph-server with the bearer token injected server-side (the browser stays
 same-origin — omnigraph-server 0.7.0 sets no CORS headers, and the token never
-reaches the page). Source flags (`--server/--graph/--token/--branch`) apply to
-`view`/`tui`/`validate`/`render`; graph-id precedence is `--graph` →
-`$OMNIGRAPH_GRAPH_ID` → notebook `graph:`.
+reaches the page). Source flags (`--server NAME|URL` / `--graph` / `--token` /
+`--branch` / `--profile`) apply to `view`/`tui`/`validate`/`render`; connection
+resolves flags → omnigraph operator config (`~/.omnigraph/config.yaml` +
+`credentials`) → the notebook's `server`/`graph`, so once you've `omnigraph
+login`'d no flags are needed.
 
 ### Agent / scripting surface
 
