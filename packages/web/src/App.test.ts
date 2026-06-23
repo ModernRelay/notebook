@@ -12,8 +12,15 @@ describe("buildConfig", () => {
     );
     const config = await buildConfig();
     expect(config.label).toBe("server: http://example.test · graph: acme · review");
-    expect(config.source.capabilities().rawGq).toBe(true);
+    // rawGq is off unless the explicit ?allowRawGq escape hatch is present.
+    expect(config.source.capabilities().rawGq).toBe(false);
     expect(storage.get("omnigraph_token")).toBe("tok");
+  });
+
+  it("enables rawGq only via the ?allowRawGq escape hatch", async () => {
+    stubWindow("http://127.0.0.1:5173/?server=http://example.test&graph=acme&allowRawGq=1");
+    const config = await buildConfig();
+    expect(config.source.capabilities().rawGq).toBe(true);
   });
 
   it("loads a notebook from the ?notebook= URL", async () => {

@@ -21,7 +21,12 @@ import {
 
 export interface ClientOptions {
   baseUrl: string;
-  /** Bearer token. Falls back to `OMNIGRAPH_TOKEN` env var when unset. */
+  /**
+   * Bearer token, supplied explicitly by the caller. Token resolution (flags,
+   * `~/.omnigraph/credentials`, the `OMNIGRAPH_TOKEN_<SERVER>` /
+   * `OMNIGRAPH_BEARER_TOKEN` chain) lives in the shared operator resolver
+   * (`@modernrelay/notebook-client/node`); the Client reads no env itself.
+   */
   token?: string;
   /**
    * Cluster graph id. omnigraph-server 0.7.0+ is cluster-only: every read and
@@ -84,10 +89,9 @@ export class Client {
   private readonly graphId: string | undefined;
 
   constructor(opts: ClientOptions) {
-    const token =
-      opts.token ??
-      process.env.OMNIGRAPH_TOKEN ??
-      process.env.OMNIGRAPH_BEARER_TOKEN;
+    // No env fallback here — the caller passes an already-resolved token (see
+    // the operator resolver). Keeps token resolution in one place (canon §4.7).
+    const token = opts.token;
     this.graphId = opts.graphId;
     this.og = new Omnigraph({
       baseUrl: opts.baseUrl,

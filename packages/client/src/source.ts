@@ -22,6 +22,13 @@ import { translateMutation } from "./translate.js";
 export interface ServerSourceOptions {
   /** Default branch for reads + writes. CLI flag and notebook field win over this. */
   branch?: string;
+  /**
+   * Allow the raw `.gq` escape hatch (`query.rawGq`). **Off by default** — in
+   * production/operator contexts notebooks bind to server-owned catalog queries
+   * (`query.ref`); raw `.gq` is a deliberate dev/CLI opt-in (canon §4.2). When
+   * false, a notebook with a `rawGq` cell fails compatibility validation.
+   */
+  allowRawGq?: boolean;
 }
 
 export class ServerSource implements Source {
@@ -33,7 +40,9 @@ export class ServerSource implements Source {
   capabilities(): SourceCapabilities {
     return {
       namedQueries: true,
-      rawGq: true,
+      // Capability-gated, off by default (canon §4.2): only advertised when the
+      // dev/CLI escape hatch is explicitly enabled.
+      rawGq: this.opts.allowRawGq ?? false,
       mutationKinds: ["set_field"],
       branchReads: true,
       snapshotReads: true,

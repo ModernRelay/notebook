@@ -41,13 +41,15 @@ export async function viewCommand(argv: string[]): Promise<number> {
   }
 
   const loaded = loadNotebook(notebookPath);
-  const connection = resolveConnection(loaded, sourceOptionsFrom(values));
+  const sourceOpts = sourceOptionsFrom(values);
+  const connection = resolveConnection(loaded, sourceOpts);
 
   await serve({
     notebookPath: loaded.notebookPath,
     connection,
     port,
     open: values["no-open"] !== true,
+    ...(sourceOpts.allowRawGq ? { allowRawGq: true } : {}),
   });
 
   // The HTTP server keeps the event loop alive; hold here until Ctrl-C so the

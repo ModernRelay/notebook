@@ -257,7 +257,13 @@ strict, single-version schema is safe; no version negotiation or legacy-v1 suppo
 **Phase 1 — read-only canon (v1).**
 - [x] Cells reference catalog queries by `ref`; `ServerSource.read` → `og.queries.invoke`;
       `ReadRequest.queryRef` plumbing; deleted `translate.ts` read path + the `nodes`/`path`/`ego` DSL.
-- [x] `rawGq` escape hatch: capability-gated; validation warns.
+- [x] `rawGq` escape hatch: capability-gated and **off by default** (`ServerSource.allowRawGq`); a notebook
+      with a `rawGq` cell fails compatibility unless the explicit dev/CLI hatch is on (`--allow-raw-gq`,
+      `?allowRawGq`). When enabled, validation still warns. (§4.2)
+- [x] BFF/token hardening (§4.7): the `view` proxy is authoritative for auth — it always strips client
+      `Authorization`/`Proxy-Authorization` and injects only the server-side token; the browser holds no
+      default token (no `devtoken`); the `Client` reads no env (resolution lives only in the operator
+      resolver — `OMNIGRAPH_TOKEN`/`OMNIGRAPH_GRAPH_ID` are gone).
 - [~] `notebook validate` parses + capability-checks; resolving `ref`/params against the live catalog
       (`og.queries.list()`) is still TODO (needs a reachable server).
 - [x] Strict schema; rejects stale fixture-mode keys (internal tool — no version support).

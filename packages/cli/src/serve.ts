@@ -42,6 +42,8 @@ export interface ServeOptions {
   connection: Connection;
   port: number;
   open: boolean;
+  /** `--allow-raw-gq` — forwarded to the browser as `?allowRawGq=1`. */
+  allowRawGq?: boolean;
 }
 
 export async function serve(opts: ServeOptions): Promise<void> {
@@ -98,7 +100,7 @@ export async function serve(opts: ServeOptions): Promise<void> {
     });
   });
   const port = (server.address() as AddressInfo).port;
-  const url = buildOpenUrl(port, opts.connection);
+  const url = buildOpenUrl(port, opts.connection, opts.allowRawGq === true);
 
   process.stdout.write(`\n@modernrelay/notebook → http://127.0.0.1:${port}\n`);
   process.stdout.write(`  ${opts.connection.label}\n`);
@@ -106,12 +108,18 @@ export async function serve(opts: ServeOptions): Promise<void> {
   if (opts.open) openBrowser(url);
 }
 
-function buildOpenUrl(port: number, conn: Connection): string {
+function buildOpenUrl(
+  port: number,
+  conn: Connection,
+  allowRawGq: boolean,
+): string {
   const params = new URLSearchParams();
   params.set("notebook", "/notebook.yaml");
   params.set("server", "/og"); // same-origin via the proxy above
   params.set("graph", conn.graphId);
   if (conn.branch) params.set("branch", conn.branch);
+  // The browser gates rawGq itself (server-side flag → URL → web config).
+  if (allowRawGq) params.set("allowRawGq", "1");
   return `http://127.0.0.1:${port}/?${params.toString()}`;
 }
 

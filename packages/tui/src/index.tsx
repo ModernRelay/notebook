@@ -36,6 +36,7 @@ interface ParsedArgs {
   branch?: string;
   graph?: string;
   profile?: string;
+  allowRawGq?: boolean;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -52,6 +53,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       out.graph = argv[++i];
     } else if (a === "--profile") {
       out.profile = argv[++i];
+    } else if (a === "--allow-raw-gq") {
+      out.allowRawGq = true;
     } else if (a === "-h" || a === "--help") {
       printUsage();
       process.exit(0);
@@ -68,7 +71,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 function printUsage(): void {
   process.stderr.write(`
-omnigraph-tui <notebook.yaml> [--server NAME|URL] [--graph ID] [--token TOKEN] [--branch NAME] [--profile NAME]
+omnigraph-tui <notebook.yaml> [--server NAME|URL] [--graph ID] [--token TOKEN] [--branch NAME] [--profile NAME] [--allow-raw-gq]
 
   Reads + writes go to omnigraph-server via the @modernrelay/omnigraph SDK.
   Connection resolves from flags, then omnigraph operator config
@@ -112,10 +115,10 @@ export function main(argv: readonly string[]): void {
     graphId: conn.graphId,
     ...(conn.token !== undefined ? { token: conn.token } : {}),
   });
-  const source: Source = new ServerSource(
-    client,
-    conn.branch !== undefined ? { branch: conn.branch } : {},
-  );
+  const source: Source = new ServerSource(client, {
+    ...(conn.branch !== undefined ? { branch: conn.branch } : {}),
+    ...(args.allowRawGq ? { allowRawGq: true } : {}),
+  });
   const label = conn.label;
 
   render(

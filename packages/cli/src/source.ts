@@ -14,6 +14,8 @@ export interface SourceOptions {
   graph?: string;
   /** `--profile` — named operator-config profile. */
   profile?: string;
+  /** `--allow-raw-gq` — enable the raw `.gq` escape hatch (off by default). */
+  allowRawGq?: boolean;
 }
 
 export interface LoadedNotebook {
@@ -96,6 +98,7 @@ export function buildSource(
   });
   const source = new ServerSource(client, {
     ...(connection.branch !== undefined ? { branch: connection.branch } : {}),
+    ...(opts.allowRawGq ? { allowRawGq: true } : {}),
   });
   return { source, connection };
 }

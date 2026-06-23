@@ -11,13 +11,17 @@ export interface AppConfig {
 }
 
 function readToken(): string | undefined {
+  // Only an explicit `?token=` (persisted for direct, non-proxy server mode).
+  // No default token: through the `view` BFF the proxy injects the server-side
+  // token and strips any client-supplied Authorization, so the browser holds
+  // none of its own (canon §4.7).
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get("token");
   if (fromUrl) {
     window.localStorage.setItem("omnigraph_token", fromUrl);
     return fromUrl;
   }
-  return window.localStorage.getItem("omnigraph_token") ?? "devtoken";
+  return window.localStorage.getItem("omnigraph_token") ?? undefined;
 }
 
 export async function buildConfig(): Promise<AppConfig> {
@@ -46,6 +50,9 @@ export async function buildConfig(): Promise<AppConfig> {
     );
   }
   const branch = url.searchParams.get("branch") ?? undefined;
+  // rawGq is off by default (operator/production context); enable only via the
+  // explicit `?allowRawGq` escape hatch (e.g. `view --allow-raw-gq` forwards it).
+  const allowRawGq = isTruthyParam(url.searchParams.get("allowRawGq"));
   // omnigraph-server 0.7.0+ is cluster-only; reads/writes are graph-scoped.
   const graph = url.searchParams.get("graph") ?? notebook.graph;
   if (!graph) {
@@ -60,9 +67,17 @@ export async function buildConfig(): Promise<AppConfig> {
   });
   return {
     notebook,
-    source: new ServerSource(client, branch ? { branch } : {}),
+    source: new ServerSource(client, {
+      ...(branch ? { branch } : {}),
+      ...(allowRawGq ? { allowRawGq: true } : {}),
+    }),
     label: `server: ${server} · graph: ${graph}${branch ? ` · ${branch}` : ""}`,
   };
+}
+
+/** URL flag truthiness: present and not an explicit off value → true. */
+function isTruthyParam(v: string | null): boolean {
+  return v !== null && v !== "" && v !== "0" && v !== "false";
 }
 
 async function fetchText(url: URL): Promise<string> {

@@ -22,6 +22,7 @@ const SOURCE_FLAGS = `Source flags (view/tui/validate/render):
   --token TOKEN       bearer token (else ~/.omnigraph/credentials or env)
   --branch NAME       read/write branch
   --profile NAME      operator-config profile (else $OMNIGRAPH_PROFILE)
+  --allow-raw-gq      enable the raw .gq escape hatch (off by default)
 With ~/.omnigraph operator config set up (\`omnigraph login\`), no flags needed.`;
 
 const HELP = `@modernrelay/notebook v${VERSION} — run an omnigraph notebook anywhere

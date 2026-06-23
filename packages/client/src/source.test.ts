@@ -10,16 +10,22 @@ const CTX: ExecutionContext = {
 };
 
 describe("ServerSource", () => {
-  it("declares runtime capabilities", () => {
+  it("declares runtime capabilities; rawGq is off by default", () => {
     const source = new ServerSource(fakeClient({}));
     expect(source.capabilities()).toMatchObject({
       namedQueries: true,
-      rawGq: true,
+      rawGq: false,
       mutationKinds: ["set_field"],
       branchReads: true,
       snapshotReads: true,
       branchWrites: true,
     });
+  });
+
+  it("advertises rawGq only when the escape hatch is enabled", () => {
+    expect(
+      new ServerSource(fakeClient({}), { allowRawGq: true }).capabilities().rawGq,
+    ).toBe(true);
   });
 
   it("invokes a catalog query by ref with params + target", async () => {
