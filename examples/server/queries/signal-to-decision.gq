@@ -1,0 +1,12 @@
+// Signal → Decision triggers, for the `signal-to-decision` Path lens.
+query signal_to_decision() {
+  match {
+    $s: Signal
+    $s triggers $d
+  }
+  return {
+    $s.title as signal_title,
+    "triggers" as triggers_label,
+    $d.title as decision_title
+  }
+}

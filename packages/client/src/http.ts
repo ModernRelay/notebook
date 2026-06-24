@@ -16,11 +16,17 @@ import {
   OmnigraphError,
   type QueryInput as SdkQueryInput,
   type MutationInput as SdkMutationInput,
+  type Read as SdkRead,
 } from "@modernrelay/omnigraph";
 
 export interface ClientOptions {
   baseUrl: string;
-  /** Bearer token. Falls back to `OMNIGRAPH_TOKEN` env var when unset. */
+  /**
+   * Bearer token, supplied explicitly by the caller. Token resolution (flags,
+   * `~/.omnigraph/credentials`, the `OMNIGRAPH_TOKEN_<SERVER>` /
+   * `OMNIGRAPH_BEARER_TOKEN` chain) lives in the shared operator resolver
+   * (`@modernrelay/notebook-client/node`); the Client reads no env itself.
+   */
   token?: string;
   /**
    * Cluster graph id. omnigraph-server 0.7.0+ is cluster-only: every read and
@@ -83,10 +89,9 @@ export class Client {
   private readonly graphId: string | undefined;
 
   constructor(opts: ClientOptions) {
-    const token =
-      opts.token ??
-      process.env.OMNIGRAPH_TOKEN ??
-      process.env.OMNIGRAPH_BEARER_TOKEN;
+    // No env fallback here — the caller passes an already-resolved token (see
+    // the operator resolver). Keeps token resolution in one place (canon §4.7).
+    const token = opts.token;
     this.graphId = opts.graphId;
     this.og = new Omnigraph({
       baseUrl: opts.baseUrl,
@@ -133,6 +138,41 @@ export class Client {
       };
     } catch (e) {
       throw toHttpError(e, "/query");
+    }
+  }
+
+  /**
+   * Invoke a server-owned catalog query by name (`POST /queries/{name}`). The
+   * query body lives in the cluster registry, not here — we pass only runtime
+   * inputs. `expectMutation: false` asserts a read (the server rejects a stored
+   * mutation), so the untagged `Read | Change` response is a read envelope.
+   */
+  async invoke(
+    name: string,
+    input: { params?: Record<string, unknown>; branch?: string; snapshot?: string },
+    signal?: AbortSignal,
+  ): Promise<ReadOutput> {
+    this.requireGraph(`/queries/${name}`);
+    try {
+      const r = (await this.og.queries.invoke(
+        name,
+        {
+          expectMutation: false,
+          ...(input.params !== undefined ? { params: input.params } : {}),
+          ...(input.branch !== undefined ? { branch: input.branch } : {}),
+          ...(input.snapshot !== undefined ? { snapshot: input.snapshot } : {}),
+        },
+        signal ? { signal } : {},
+      )) as SdkRead;
+      return {
+        query_name: r.queryName,
+        target: r.target?.branch ?? r.target?.snapshot ?? "main",
+        row_count: r.rowCount,
+        columns: r.columns ?? [],
+        rows: (r.rows ?? []) as Record<string, unknown>[],
+      };
+    } catch (e) {
+      throw toHttpError(e, `/queries/${name}`);
     }
   }
 

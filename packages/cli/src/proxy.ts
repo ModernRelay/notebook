@@ -24,11 +24,14 @@ function stripHopByHop(
 
 /**
  * Reverse-proxy a request under `/og` to the upstream omnigraph-server: strip the
- * `/og` prefix, set `Host` (changeOrigin, for TLS/vhost routing), and OVERWRITE
- * `Authorization` with the server-side token (BFF — the token never reaches the
- * browser). The body is piped unmodified, so the incoming `content-length` stays
- * valid. omnigraph-server 0.7.0 sets no CORS headers, which is why the browser
- * must talk to it same-origin through here.
+ * `/og` prefix, set `Host` (changeOrigin, for TLS/vhost routing), and inject
+ * `Authorization` from the server-side token. The proxy is **authoritative for
+ * auth** (BFF): it always drops any client-supplied `Authorization` /
+ * `Proxy-Authorization` and sets the bearer only from the server token, so a
+ * browser can never reach upstream with a credential of its own. The body is
+ * piped unmodified, so the incoming `content-length` stays valid.
+ * omnigraph-server 0.7.0 sets no CORS headers, which is why the browser must
+ * talk to it same-origin through here.
  */
 export function proxyOg(
   req: http.IncomingMessage,
@@ -42,8 +45,13 @@ export function proxyOg(
 
   const headers: http.OutgoingHttpHeaders = { ...req.headers };
   headers.host = upstream.host;
+  // Never forward a client-supplied credential. proxy-authorization is also
+  // hop-by-hop (stripped below); authorization is end-to-end, so drop it here
+  // explicitly, then set only the server-side token.
+  delete headers.authorization;
+  delete headers["proxy-authorization"];
   if (token) headers.authorization = `Bearer ${token}`;
-  // authorization is end-to-end and was just set above, so it survives the strip.
+  // authorization was just set from the server token, so it survives the strip.
   stripHopByHop(headers);
 
   const upstreamReq = lib.request(

@@ -15,8 +15,8 @@ const ActionDescriptorSchema = z
     /**
      * Declarative mutation spec. When set, the lens fires the built-in
      * `mutate` action with `{ ...mutation, target_id: row[id_column] }`.
-     * The substrate (FixtureSource in dev, omnigraph-server `POST /change`
-     * in prod) executes one atomic mutation per click.
+     * omnigraph-server (`POST /change`, via the SDK) executes one atomic
+     * mutation per click.
      */
     mutation: MutationSpecSchema.optional(),
   })

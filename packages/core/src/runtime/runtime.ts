@@ -24,7 +24,6 @@ import {
 import {
   dependencyMap,
   pointersOverlap,
-  resolveFixtureQuery,
   resolveParams,
   setAtPointer,
 } from "./resolve.js";
@@ -468,19 +467,14 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     if (!cell.query) return { cellId: cell.id };
     const target = this.readTargetForCell(cell);
     const request: ReadRequest = { cellId: cell.id };
-    if (cell.query.source !== undefined) request.querySource = cell.query.source;
+    if (cell.query.ref !== undefined) request.queryRef = cell.query.ref;
+    if (cell.query.rawGq !== undefined) request.querySource = cell.query.rawGq;
     if (cell.query.name !== undefined) request.queryName = cell.query.name;
     if (cell.query.params !== undefined) {
       request.params = resolveParams(cell.query.params, this.snapshot.state);
     }
     if (target.branch !== undefined) request.branch = target.branch;
     if (target.snapshot !== undefined) request.snapshot = target.snapshot;
-    if (cell.query.fixture !== undefined) {
-      request.fixtureQuery = resolveFixtureQuery(
-        cell.query.fixture,
-        this.snapshot.state,
-      );
-    }
     return request;
   }
 

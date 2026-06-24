@@ -1,6 +1,6 @@
 import React from "react";
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 // When stdin isn't a TTY (CI, piped runs, smoke tests), Ink + @json-render/ink
 // throw inside `useInput` because raw mode isn't available. We stub the few
@@ -24,9 +24,8 @@ if (RAN_NON_TTY) {
 
 import { render } from "ink";
 import { parseNotebook } from "@modernrelay/notebook-core";
-import { FixtureSource } from "@modernrelay/notebook-fixture";
-import { loadFixture } from "@modernrelay/notebook-fixture/node";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
+import { resolveConnection } from "@modernrelay/notebook-client/node";
 import type { Source } from "@modernrelay/notebook-core";
 import { App } from "./App.js";
 
@@ -36,6 +35,8 @@ interface ParsedArgs {
   token?: string;
   branch?: string;
   graph?: string;
+  profile?: string;
+  allowRawGq?: boolean;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -50,6 +51,10 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       out.branch = argv[++i];
     } else if (a === "--graph") {
       out.graph = argv[++i];
+    } else if (a === "--profile") {
+      out.profile = argv[++i];
+    } else if (a === "--allow-raw-gq") {
+      out.allowRawGq = true;
     } else if (a === "-h" || a === "--help") {
       printUsage();
       process.exit(0);
@@ -66,16 +71,13 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 function printUsage(): void {
   process.stderr.write(`
-omnigraph-tui <notebook.yaml> [--server URL] [--token TOKEN] [--branch NAME] [--graph ID]
+omnigraph-tui <notebook.yaml> [--server NAME|URL] [--graph ID] [--token TOKEN] [--branch NAME] [--profile NAME] [--allow-raw-gq]
 
-  Fixture mode  — when the notebook declares \`fixture: <relative-path>\`,
-                  reads + writes go to the in-memory FixtureSource.
-  Server mode   — when the notebook declares \`server: <URL>\` (or you pass
-                  --server), reads + writes go to omnigraph-server. Bearer
-                  token from --token or \$OMNIGRAPH_TOKEN. omnigraph-server
-                  0.7.0+ is cluster-only, so a graph id is required: set
-                  \`graph:\` in the notebook, pass --graph, or set
-                  \$OMNIGRAPH_GRAPH_ID.
+  Reads + writes go to omnigraph-server via the @modernrelay/omnigraph SDK.
+  Connection resolves from flags, then omnigraph operator config
+  (~/.omnigraph/config.yaml + credentials), then the notebook's \`server:\`/
+  \`graph:\`. With operator config set up (\`omnigraph login\`), no flags are
+  needed. omnigraph-server 0.7.0+ is cluster-only, so a graph id is required.
 
 `);
 }
@@ -86,54 +88,38 @@ export function main(argv: readonly string[]): void {
   const yaml = readFileSync(notebookAbs, "utf8");
   const notebook = parseNotebook(yaml);
 
-  // CLI flags > notebook fields. Falls back to env for token only.
-  // OMNIGRAPH_BEARER_TOKEN is the conventional omnigraph env var (server +
-  // CLI use it); accept it so plain `omnigraph-tui <nb>` works without an
-  // OMNIGRAPH_TOKEN alias.
-  const serverUrl = args.server ?? notebook.server;
-  const token =
-    args.token ??
-    process.env.OMNIGRAPH_TOKEN ??
-    process.env.OMNIGRAPH_BEARER_TOKEN;
-  // omnigraph-server 0.7.0+ is cluster-only; every read/write is graph-scoped.
-  // Precedence: explicit flag → environment → committed notebook (most-specific
-  // / most-ephemeral wins, matching how `token` resolves above).
-  const graphId =
-    args.graph ?? process.env.OMNIGRAPH_GRAPH_ID ?? notebook.graph;
-
-  let source: Source;
-  let label: string;
-
-  if (notebook.fixture) {
-    const fixturePath = resolve(dirname(notebookAbs), notebook.fixture);
-    const fixture = loadFixture(fixturePath);
-    source = new FixtureSource(fixture);
-    label = `fixture: ${notebook.fixture}`;
-  } else if (serverUrl) {
-    if (!graphId) {
-      process.stderr.write(
-        `omnigraph-tui: server mode requires a graph id (omnigraph-server 0.7.0+\n` +
-          `is cluster-only). Set \`graph:\` in the notebook, pass --graph <id>,\n` +
-          `or set $OMNIGRAPH_GRAPH_ID.\n`,
-      );
-      process.exit(2);
-    }
-    const client = new Client({
-      baseUrl: serverUrl,
-      graphId,
-      ...(token !== undefined ? { token } : {}),
-    });
-    source = new ServerSource(client, {
-      ...(args.branch !== undefined ? { branch: args.branch } : {}),
-    });
-    label = `server: ${serverUrl} · graph: ${graphId}`;
-  } else {
+  let conn;
+  try {
+    conn = resolveConnection(
+      {
+        ...(args.server !== undefined ? { server: args.server } : {}),
+        ...(args.graph !== undefined ? { graph: args.graph } : {}),
+        ...(args.token !== undefined ? { token: args.token } : {}),
+        ...(args.branch !== undefined ? { branch: args.branch } : {}),
+        ...(args.profile !== undefined ? { profile: args.profile } : {}),
+      },
+      {
+        ...(notebook.server !== undefined ? { server: notebook.server } : {}),
+        ...(notebook.graph !== undefined ? { graph: notebook.graph } : {}),
+      },
+    );
+  } catch (err) {
     process.stderr.write(
-      `omnigraph-tui: notebook has neither \`fixture:\` nor \`server:\`,\n` +
-        `and no --server flag was given. Set one of the three.\n`,
+      `omnigraph-tui: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     process.exit(2);
   }
+
+  const client = new Client({
+    baseUrl: conn.baseUrl,
+    graphId: conn.graphId,
+    ...(conn.token !== undefined ? { token: conn.token } : {}),
+  });
+  const source: Source = new ServerSource(client, {
+    ...(conn.branch !== undefined ? { branch: conn.branch } : {}),
+    ...(args.allowRawGq ? { allowRawGq: true } : {}),
+  });
+  const label = conn.label;
 
   render(
     <App

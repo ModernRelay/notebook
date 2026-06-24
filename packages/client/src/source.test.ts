@@ -10,11 +10,11 @@ const CTX: ExecutionContext = {
 };
 
 describe("ServerSource", () => {
-  it("declares runtime capabilities", () => {
+  it("declares runtime capabilities; rawGq is off by default", () => {
     const source = new ServerSource(fakeClient({}));
     expect(source.capabilities()).toMatchObject({
-      structuredQueryKinds: ["nodes", "path", "ego"],
-      rawGq: true,
+      namedQueries: true,
+      rawGq: false,
       mutationKinds: ["set_field"],
       branchReads: true,
       snapshotReads: true,
@@ -22,13 +22,39 @@ describe("ServerSource", () => {
     });
   });
 
-  it("passes raw .gq through as the deprecated escape hatch", async () => {
+  it("advertises rawGq only when the escape hatch is enabled", () => {
+    expect(
+      new ServerSource(fakeClient({}), { allowRawGq: true }).capabilities().rawGq,
+    ).toBe(true);
+  });
+
+  it("invokes a catalog query by ref with params + target", async () => {
+    const invoke = vi.fn(async () => readOutput([{ id: "d1" }]));
+    const source = new ServerSource(fakeClient({ invoke }), { branch: "main" });
+    const out = await source.read(
+      {
+        cellId: "decisions",
+        queryRef: "decisions_by_urgency",
+        params: { status: "open" },
+      },
+      CTX,
+    );
+    expect(invoke.mock.calls[0]?.[0]).toBe("decisions_by_urgency");
+    expect(invoke.mock.calls[0]?.[1]).toMatchObject({
+      params: { status: "open" },
+      branch: "main",
+    });
+    expect(out.rows).toEqual([{ id: "d1" }]);
+  });
+
+  it("passes raw .gq through the escape hatch via query", async () => {
     const query = vi.fn(async () => readOutput([]));
     const source = new ServerSource(fakeClient({ query }));
     await source.read(
       {
         cellId: "raw",
-        querySource: "query q() { match { $d: Decision } return { $d.slug as slug } }",
+        querySource:
+          "query q() { match { $d: Decision } return { $d.slug as slug } }",
         queryName: "q",
       },
       CTX,
@@ -39,164 +65,9 @@ describe("ServerSource", () => {
     });
   });
 
-  it("decomposes ego reads and synthesizes bare-center rows", async () => {
-    const query = vi.fn(async (input: QueryInput) => {
-      if (input.name === "decision_neighbors_center") {
-        return readOutput([{ id: "d1", name: "D1", __ng_center_id: "d1" }]);
-      }
-      return readOutput([]);
-    });
-    const source = new ServerSource(fakeClient({ query }));
-    const out = await source.read(
-      {
-        cellId: "decision-neighbors",
-        fixtureQuery: {
-          kind: "ego",
-          center: { type: "Decision", where: { slug: "d1" } },
-          out: ["GovernedBy"],
-          in: [],
-          project: [
-            { var: "center.slug", as: "id" },
-            { var: "center.title", as: "name" },
-            { var: "edge_type", as: "predicate" },
-            { var: "neighbor.slug", as: "neighbor" },
-          ],
-        },
-      },
-      CTX,
-    );
-    expect(query).toHaveBeenCalledTimes(2);
-    expect(out.columns).toEqual(["id", "name", "predicate", "neighbor"]);
-    expect(out.rows).toEqual([
-      { id: "d1", name: "D1", predicate: null, neighbor: null },
-    ]);
-  });
-
-  it("merges out and in ego incident rows across multiple edge types", async () => {
-    const query = vi.fn(async (input: QueryInput) => {
-      if (input.name === "decision_neighbors_center") {
-        return readOutput([
-          { id: "d1", name: "D1", __ng_center_id: "d1" },
-          { id: "d2", name: "D2", __ng_center_id: "d2" },
-        ]);
-      }
-      if (input.name === "decision_neighbors_out_GovernedBy") {
-        return readOutput([
-          {
-            id: "d1",
-            name: "D1",
-            predicate: "GovernedBy",
-            direction: "out",
-            neighbor: "policy-1",
-            __ng_center_id: "d1",
-          },
-        ]);
-      }
-      if (input.name === "decision_neighbors_in_Owns") {
-        return readOutput([
-          {
-            id: "d1",
-            name: "D1",
-            predicate: "Owns",
-            direction: "in",
-            neighbor: "andrew",
-            __ng_center_id: "d1",
-          },
-        ]);
-      }
-      return readOutput([]);
-    });
-    const source = new ServerSource(fakeClient({ query }));
-    const out = await source.read(
-      {
-        cellId: "decision-neighbors",
-        fixtureQuery: {
-          kind: "ego",
-          center: { type: "Decision", where: {} },
-          out: ["GovernedBy"],
-          in: ["Owns"],
-          project: [
-            { var: "center.slug", as: "id" },
-            { var: "center.title", as: "name" },
-            { var: "edge_type", as: "predicate" },
-            { var: "edge_direction", as: "direction" },
-            { var: "neighbor.slug", as: "neighbor" },
-          ],
-        },
-      },
-      CTX,
-    );
-
-    expect(query).toHaveBeenCalledTimes(3);
-    expect(out.rows).toEqual([
-      {
-        id: "d1",
-        name: "D1",
-        predicate: "GovernedBy",
-        direction: "out",
-        neighbor: "policy-1",
-      },
-      {
-        id: "d1",
-        name: "D1",
-        predicate: "Owns",
-        direction: "in",
-        neighbor: "andrew",
-      },
-      {
-        id: "d2",
-        name: "D2",
-        predicate: null,
-        direction: null,
-        neighbor: null,
-      },
-    ]);
-  });
-
-  it("passes resolved params into generated ego reads", async () => {
-    const query = vi.fn(async () => readOutput([]));
-    const source = new ServerSource(fakeClient({ query }));
-    await source.read(
-      {
-        cellId: "decision-neighbors",
-        params: { actor: "andrew" },
-        fixtureQuery: {
-          kind: "ego",
-          center: { type: "Decision", where: { slug: "d1" } },
-          out: ["GovernedBy"],
-          in: [],
-          project: [{ var: "center.slug", as: "id" }],
-        },
-      },
-      CTX,
-    );
-    expect(query.mock.calls[0]?.[0].params).toMatchObject({
-      actor: "andrew",
-      w_slug: "d1",
-    });
-    expect(query.mock.calls[1]?.[0].params).toMatchObject({
-      actor: "andrew",
-      w_slug: "d1",
-    });
-  });
-
-  it("rejects unsupported server ego projections clearly", async () => {
+  it("throws when a read has neither ref nor rawGq", async () => {
     const source = new ServerSource(fakeClient({}));
-    await expect(
-      source.read(
-        {
-          cellId: "bad-ego",
-          fixtureQuery: {
-            kind: "ego",
-            center: { type: "Decision", where: {} },
-            out: ["Owns"],
-            in: [],
-            project: [{ var: "edge.weight", as: "weight" }],
-          },
-        },
-        CTX,
-      ),
-    ).rejects.toThrow(/not supported in server mode/);
+    await expect(source.read({ cellId: "bad" }, CTX)).rejects.toThrow(/neither/);
   });
 
   it("uses mutation write target branch from runtime context", async () => {
@@ -252,6 +123,10 @@ describe("ServerSource", () => {
 });
 
 function fakeClient(overrides: {
+  invoke?: (
+    name: string,
+    input: { params?: Record<string, unknown>; branch?: string; snapshot?: string },
+  ) => Promise<ReturnType<typeof readOutput>>;
   query?: (input: QueryInput) => Promise<ReturnType<typeof readOutput>>;
   mutate?: (input: MutateInput) => Promise<{
     branch: string;
@@ -261,6 +136,7 @@ function fakeClient(overrides: {
   }>;
 }): Client {
   return {
+    invoke: overrides.invoke ?? (async () => readOutput([])),
     query: overrides.query ?? (async () => readOutput([])),
     mutate:
       overrides.mutate ??

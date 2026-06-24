@@ -1,6 +1,5 @@
 import type {
   Cell,
-  FixtureQuery,
   MutationParams,
   MutationResult,
   MutationSpec,
@@ -8,11 +7,12 @@ import type {
 } from "../spec/index.js";
 import type { LensSpec, QueryResult } from "../catalog/index.js";
 
-export type StructuredQueryKind = FixtureQuery["kind"];
 export type MutationKind = MutationSpec["kind"];
 
 export interface SourceCapabilities {
-  structuredQueryKinds: readonly StructuredQueryKind[];
+  /** Source can invoke server-owned catalog queries by name (`query.ref`). */
+  namedQueries: boolean;
+  /** Source accepts raw `.gq` source (`query.rawGq` escape hatch). */
   rawGq: boolean;
   mutationKinds: readonly MutationKind[];
   branchReads: boolean;
@@ -27,12 +27,15 @@ export interface RuntimeTarget {
 
 export interface ReadRequest {
   cellId: string;
+  /** Catalog query name (`query.ref`) — invoked server-side by name. */
+  queryRef?: string;
+  /** Raw `.gq` source (`query.rawGq` escape hatch). */
   querySource?: string;
+  /** Selects a query within a multi-query `querySource` payload. */
   queryName?: string;
   params?: Record<string, unknown>;
   branch?: string;
   snapshot?: string;
-  fixtureQuery?: FixtureQuery;
 }
 
 export interface ReadOutput {

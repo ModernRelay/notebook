@@ -2,7 +2,15 @@ import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 
 /** Data-bearing lenses (cells with a query). */
-export const LensKind = z.enum(["Table", "Subgraph", "Path", "ActionList"]);
+export const LensKind = z.enum([
+  "Table",
+  "Subgraph",
+  "Path",
+  "ActionList",
+  "Timeline",
+  "Card",
+  "Quote",
+]);
 export type LensKind = z.infer<typeof LensKind>;
 
 /** Interactive controls (cells without a query). */
@@ -15,6 +23,9 @@ export const ComponentKind = z.enum([
   "Subgraph",
   "Path",
   "ActionList",
+  "Timeline",
+  "Card",
+  "Quote",
   "Button",
   "Toggle",
   "Select",
@@ -22,16 +33,18 @@ export const ComponentKind = z.enum([
 export type ComponentKind = z.infer<typeof ComponentKind>;
 
 /** Element-level action binding (mirrors json-render's shape). */
-export const ActionBindingSchema = z.object({
-  action: z.string().min(1),
-  params: z.record(z.string(), z.unknown()).optional(),
-});
+export const ActionBindingSchema = z
+  .object({
+    action: z.string().min(1),
+    params: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 export type ActionBinding = z.infer<typeof ActionBindingSchema>;
 
 // ── Mutation DSL ──────────────────────────────────────────────────────────
 // Declarative atomic mutations dispatched by ActionList per-row buttons.
-// The substrate (FixtureSource in dev, omnigraph-server `POST /change` in
-// prod) executes one mutation per click. Cell authors declare the shape;
+// The substrate (omnigraph-server `POST /change`, via the SDK) executes one
+// mutation per click. Cell authors declare the shape;
 // the lens fills `target_id` from the row at click time.
 
 const SetFieldMutationSchema = z.object({
@@ -59,109 +72,36 @@ export interface MutationResult {
   kind: "ok";
 }
 
-// ── Fixture-mode query DSL ────────────────────────────────────────────────
-// Used when a notebook declares a top-level `fixture` path. The cell's
-// `query.fixture` carries a structured query that the in-memory runner
-// evaluates against the loaded JSON graph. See @modernrelay/notebook-fixture.
-
-const FixtureNodesQuerySchema = z.object({
-  kind: z.literal("nodes"),
-  where: z.record(z.string(), z.unknown()).optional(),
-  project: z.array(z.string()).optional(),
-  order_by: z
-    .object({
-      field: z.string().min(1),
-      direction: z.enum(["asc", "desc"]).default("asc"),
-    })
-    .optional(),
-  limit: z.number().int().positive().optional(),
-});
-
-const FixturePathStepSchema = z.object({
-  /** Variable name bound by this step (every step binds its target node). */
-  var: z.string().min(1),
-  /** Optional type filter on the bound node. */
-  type: z.string().min(1).optional(),
-  /** Edge type for traversal. Required on every step except the first. */
-  edge: z.string().min(1).optional(),
-  /**
-   * Traversal direction.
-   *   - `out` (default): previous step's node is the edge source; this step
-   *     binds the edge target.
-   *   - `in`: previous step's node is the edge target; this step binds the
-   *     edge source. Useful for "Decision ← owned by ← Actor" when `owns`
-   *     is defined as Actor → Decision.
-   */
-  direction: z.enum(["out", "in"]).default("out"),
-});
-
-const FixturePathProjectionSchema = z
-  .object({
-    /** Variable + field reference, e.g. "s.title". Mutually exclusive with literal. */
-    var: z.string().min(1).optional(),
-    /** Constant string value, useful for predicate labels. */
-    literal: z.string().optional(),
-    as: z.string().min(1),
-  })
-  .refine(
-    (p) => (p.var !== undefined) !== (p.literal !== undefined),
-    "exactly one of `var` or `literal` must be set",
-  );
-
-const FixturePathQuerySchema = z.object({
-  kind: z.literal("path"),
-  steps: z.array(FixturePathStepSchema).min(2),
-  project: z.array(FixturePathProjectionSchema).min(1),
-});
-
-const FixtureEgoProjectionSchema = z.object({
-  /** One of: `center.<field>`, `edge_type`, `edge_direction`, `neighbor.<field>`, `neighbor_type`, `edge.<field>`. */
-  var: z.string().min(1),
-  as: z.string().min(1),
-});
-
-const FixtureEgoQuerySchema = z.object({
-  kind: z.literal("ego"),
-  center: z.object({
-    type: z.string().min(1),
-    where: z.record(z.string(), z.unknown()).default({}),
-  }),
-  out: z.array(z.string().min(1)).default([]),
-  in: z.array(z.string().min(1)).default([]),
-  project: z.array(FixtureEgoProjectionSchema).min(1),
-});
-
-export const FixtureQuerySchema = z.discriminatedUnion("kind", [
-  FixtureNodesQuerySchema,
-  FixturePathQuerySchema,
-  FixtureEgoQuerySchema,
-]);
-export type FixtureQuery = z.infer<typeof FixtureQuerySchema>;
-export type FixtureNodesQuery = z.infer<typeof FixtureNodesQuerySchema>;
-export type FixturePathQuery = z.infer<typeof FixturePathQuerySchema>;
-export type FixtureEgoQuery = z.infer<typeof FixtureEgoQuerySchema>;
-
 // ── Cell + Notebook ───────────────────────────────────────────────────────
 
 const QuerySchema = z
   .object({
-    // .gq mode (server). Deprecated escape hatch; prefer structured
-    // `query.fixture` so fixture/server sources can validate parity.
-    source: z.string().min(1).optional(),
+    /**
+     * Reference to a server-owned catalog query, invoked by name via the SDK's
+     * stored-query path (`og.queries.invoke`). The canonical, default path —
+     * the query body lives in the cluster catalog, never in the notebook.
+     */
+    ref: z.string().min(1).optional(),
+    /**
+     * Raw `.gq` source — a capability-gated escape hatch for prototyping,
+     * debugging, and privileged one-offs. NOT the canonical contract; prefer
+     * `ref`. Sent ad-hoc via `og.query`. See dash-books-canon.md §4.2.
+     */
+    rawGq: z.string().min(1).optional(),
+    /** Selects a query within a multi-query `rawGq` payload. */
     name: z.string().optional(),
     params: z.record(z.string(), z.unknown()).optional(),
     branch: z.string().optional(),
     snapshot: z.string().optional(),
-    // Fixture mode — used when notebook declares a top-level `fixture`.
-    fixture: FixtureQuerySchema.optional(),
   })
+  .strict()
   .refine(
     (q) => !(q.branch && q.snapshot),
     "query.branch and query.snapshot are mutually exclusive",
   )
   .refine(
-    (q) => Boolean(q.source) !== Boolean(q.fixture),
-    "exactly one of query.source or query.fixture must be set",
+    (q) => Boolean(q.ref) !== Boolean(q.rawGq),
+    "exactly one of query.ref or query.rawGq must be set",
   );
 
 /**
@@ -172,13 +112,15 @@ const QuerySchema = z
  * Shape mirrors a control cell minus `query` (controls don't fetch data;
  * they read/write state via $bindState / on.press → setState).
  */
-export const CellControlSchema = z.object({
-  id: z.string().min(1).optional(),
-  lens: ControlKind,
-  props: z.record(z.string(), z.unknown()).default({}),
-  on: z.record(z.string().min(1), ActionBindingSchema).optional(),
-  visible: z.unknown().optional(),
-});
+export const CellControlSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    lens: ControlKind,
+    props: z.record(z.string(), z.unknown()).default({}),
+    on: z.record(z.string().min(1), ActionBindingSchema).optional(),
+    visible: z.unknown().optional(),
+  })
+  .strict();
 export type CellControl = z.infer<typeof CellControlSchema>;
 
 export const CellSchema = z
@@ -210,7 +152,15 @@ export const CellSchema = z
      * Accepts a boolean, a state-condition object, or an array (AND).
      */
     visible: z.unknown().optional(),
+    /**
+     * In-flow layout width (host-shell layout tier, web-first). The web host
+     * arranges cells in a responsive 6-column canvas grid; this sets the cell's
+     * column span — `full` (default, own row), `two-thirds`, `half`, `third`.
+     * Cells flow left-to-right and wrap. The TUI ignores this (one cell per tab).
+     */
+    width: z.enum(["full", "half", "third", "two-thirds"]).optional(),
   })
+  .strict()
   .refine(
     (c) => {
       const isControl =
@@ -224,21 +174,21 @@ export const CellSchema = z
   );
 export type Cell = z.infer<typeof CellSchema>;
 
-export const NotebookSchema = z.object({
-  version: z.literal(1),
-  title: z.string().min(1),
-  /** Path to a JSON fixture (relative to the notebook). When set, runs in fixture mode. */
-  fixture: z.string().min(1).optional(),
-  /** omnigraph-server base URL when running in server mode. CLI flag overrides. */
-  server: z.url().optional(),
-  /**
-   * Cluster graph id for server mode. omnigraph-server 0.7.0+ is cluster-only:
-   * reads/writes are served under `/graphs/{graph}/…`. Required in server mode;
-   * `--graph` (TUI), `?graph=` (web), or `OMNIGRAPH_GRAPH_ID` (TUI) override it.
-   */
-  graph: z.string().min(1).optional(),
-  cells: z.array(CellSchema),
-});
+export const NotebookSchema = z
+  .object({
+    version: z.literal(1),
+    title: z.string().min(1),
+    /** omnigraph-server base URL (or operator-config server name). CLI/URL flags override. */
+    server: z.string().min(1).optional(),
+    /**
+     * Cluster graph id for server mode. omnigraph-server 0.7.0+ is cluster-only:
+     * reads/writes are served under `/graphs/{graph}/…`. Required in server mode;
+     * `--graph` (TUI/CLI) or `?graph=` (web) override it.
+     */
+    graph: z.string().min(1).optional(),
+    cells: z.array(CellSchema),
+  })
+  .strict();
 export type Notebook = z.infer<typeof NotebookSchema>;
 
 /** Parse a YAML or JSON string into a validated Notebook. Throws ZodError on failure. */

@@ -2,40 +2,22 @@ version: 1
 title: Company context (live cluster-backed omnigraph)
 server: http://127.0.0.1:8080
 # omnigraph-server 0.7.0+ is cluster-only: reads/writes are served under
-# /graphs/{graph}/…. `--graph`/`?graph=`/$OMNIGRAPH_GRAPH_ID override this.
+# /graphs/{graph}/…. `--graph`/`?graph=` override this.
 graph: company
 
-# Server-mode demo. Same lens components, same action wiring as the fixture
-# notebook — but reads go to omnigraph-server (POST /graphs/{graph}/query) and
-# ActionList clicks go to POST /graphs/{graph}/mutate (one atomic Lance commit
-# per click). Mutations persist across server restarts. Run scripts/server-demo.sh
-# first to boot a local filesystem cluster serving this `graph`.
-#
-# Translation scope: only `nodes` and `path` query kinds translate to .gq.
-# Per-step `where` filters are not yet translated, so this notebook shows ALL
-# clauses rather than narrowing by selected policy. The ActionList per-row
-# buttons still let the user approve/reject any individual clause.
+# Server-mode demo. Each cell binds to a server-owned catalog query by name
+# (`query.ref` → POST /graphs/{graph}/queries/{ref}); the query bodies live in
+# examples/server/queries/*.gq, registered in the cluster. ActionList clicks
+# still go to POST /graphs/{graph}/mutate (one atomic Lance commit per click —
+# the interim set_field write path). Run scripts/server-demo.sh first to boot a
+# local filesystem cluster serving this `graph` with these queries.
 
 cells:
 
   - id: policy-clause-review
     lens: ActionList
-    query:
-      fixture:
-        kind: path
-        steps:
-          - { var: p, type: Policy }
-          - { edge: HasClause, var: c, type: PolicyClause }
-        project:
-          # Project `slug` (server's @key field) as `id` for the ActionList,
-          # which references rows by their `id_column`. The mutation handler
-          # passes the exposed id back to the server as `target_id`, where
-          # the translator emits `where slug = $target_id`.
-          - { var: c.slug,   as: id }
-          - { var: c.title,  as: title }
-          - { var: c.text,   as: body }
-          - { var: c.status, as: status }
-          - { var: p.slug,   as: policy_id }
+    # → examples/server/queries/policy-clauses.gq
+    query: { ref: policy_clauses_for_review }
     props:
       id_column: id
       title_column: title
@@ -60,24 +42,10 @@ cells:
 
   - id: decisions-by-urgency
     lens: Table
-    # Inline filter — operates on this cell's data view, not its own screen.
-    # The Select binds /filters/decision_status; the where clause picks
-    # it up via $state and the executor pre-resolves before the .gq
-    # translator emits the parameterized match.
-    controls:
-      - lens: Select
-        props:
-          label: Status filter
-          options: ["", proposed, accepted, rejected, superseded]
-          value: { $bindState: "/filters/decision_status" }
-    query:
-      fixture:
-        kind: nodes
-        where:
-          type: Decision
-          status: { $state: "/filters/decision_status" }
-        project: [slug, title, status, urgency]
-        order_by: { field: urgency, direction: asc }
+    # → examples/server/queries/decisions-by-urgency.gq (all decisions, ordered).
+    # Status-filtered variants arrive with the richer catalog-query work
+    # (dash-books-canon.md §4.3 / Phase 2).
+    query: { ref: decisions_by_urgency }
     props:
       columns:
         - { key: slug,    label: ID }
@@ -87,16 +55,8 @@ cells:
 
   - id: signal-to-decision
     lens: Path
-    query:
-      fixture:
-        kind: path
-        steps:
-          - { var: s, type: Signal }
-          - { edge: Triggers, var: d, type: Decision }
-        project:
-          - { var: s.title, as: signal_title }
-          - { literal: triggers, as: triggers_label }
-          - { var: d.title, as: decision_title }
+    # → examples/server/queries/signal-to-decision.gq
+    query: { ref: signal_to_decision }
     props:
       steps:
         - { from_column: signal_title, predicate_column: triggers_label, to_column: decision_title }

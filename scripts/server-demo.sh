@@ -38,6 +38,7 @@ SERVER_URL="http://${SERVER_BIND}"
 
 CLUSTER_DIR="${UI_REPO}/.server-demo/cluster"
 SCHEMA_SRC="${UI_REPO}/examples/server/company.pg"
+QUERIES_SRC="${UI_REPO}/examples/server/queries"
 SEED_SRC="${UI_REPO}/examples/server/company.jsonl"
 
 log() { printf "==> %s\n" "$*"; }
@@ -58,6 +59,7 @@ else
   log "Materializing fresh cluster at ${CLUSTER_DIR}"
   mkdir -p "$CLUSTER_DIR"
   cp "$SCHEMA_SRC" "${CLUSTER_DIR}/company.pg"
+  cp -R "$QUERIES_SRC" "${CLUSTER_DIR}/queries"
   cat > "${CLUSTER_DIR}/cluster.yaml" <<EOF
 version: 1
 metadata:
@@ -68,6 +70,7 @@ state:
 graphs:
   ${GRAPH_ID}:
     schema: ./company.pg
+    queries: ./queries/
 EOF
   # validate → import (records initial state) → apply (creates the graph +
   # schema from cluster.yaml). Graphs are born from `cluster apply`, not `init`.

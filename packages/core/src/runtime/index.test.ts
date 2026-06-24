@@ -14,7 +14,7 @@ import {
 } from "./index.js";
 
 const FULL_CAPS: SourceCapabilities = {
-  structuredQueryKinds: ["nodes", "path", "ego"],
+  namedQueries: true,
   rawGq: true,
   mutationKinds: ["set_field"],
   branchReads: true,
@@ -75,13 +75,13 @@ const NOTEBOOK: Notebook = {
     {
       id: "table",
       lens: "Table",
-      query: { source: "match (n) return n" },
+      query: { ref: "table_q" },
       props: { columns: [{ key: "x", label: "X" }] },
     },
     {
       id: "path",
       lens: "Path",
-      query: { source: "match (a)-[r]->(b) return a, r, b" },
+      query: { ref: "path_q" },
       props: {
         steps: [{ from_column: "a", predicate_column: "r", to_column: "b" }],
       },
@@ -90,42 +90,31 @@ const NOTEBOOK: Notebook = {
 };
 
 describe("validateNotebookCompatibility", () => {
-  it("keeps raw .gq accepted but emits a deprecation warning", () => {
-    const result = validateNotebookCompatibility(NOTEBOOK, FULL_CAPS);
+  const RAWGQ_NB: Notebook = {
+    version: 1,
+    title: "raw",
+    cells: [
+      {
+        id: "t",
+        lens: "Table",
+        query: { rawGq: "query q() { match { $d: Decision } return { $d.slug } }" },
+        props: { columns: [{ key: "x", label: "X" }] },
+      },
+    ],
+  };
+
+  it("keeps query.rawGq accepted but emits an escape-hatch warning", () => {
+    const result = validateNotebookCompatibility(RAWGQ_NB, FULL_CAPS);
     expect(result.errors).toEqual([]);
-    expect(result.warnings.join("\n")).toMatch(/deprecated/);
+    expect(result.warnings.join("\n")).toMatch(/escape hatch/);
   });
 
-  it("rejects unsupported structured query kinds before execution", () => {
-    const nb: Notebook = {
-      version: 1,
-      title: "x",
-      fixture: "./f.json",
-      cells: [
-        {
-          id: "ego",
-          lens: "Subgraph",
-          query: {
-            fixture: {
-              kind: "ego",
-              center: { type: "Decision", where: {} },
-              out: ["owns"],
-              in: [],
-              project: [{ var: "center.id", as: "id" }],
-            },
-          },
-          props: {
-            center: { type: "Decision", id_column: "id", label_column: "id" },
-            depth: 1,
-          },
-        },
-      ],
-    };
-    const result = validateNotebookCompatibility(nb, {
+  it("rejects query.ref when the source lacks named-query support", () => {
+    const result = validateNotebookCompatibility(NOTEBOOK, {
       ...FULL_CAPS,
-      structuredQueryKinds: ["nodes", "path"],
+      namedQueries: false,
     });
-    expect(result.errors.join("\n")).toMatch(/ego/);
+    expect(result.errors.join("\n")).toMatch(/named catalog queries/);
   });
 });
 
@@ -172,12 +161,7 @@ describe("createNotebookRuntime", () => {
         {
           id: "t",
           lens: "Table",
-          query: {
-            fixture: {
-              kind: "nodes",
-              where: { type: "X", status: { $state: "/f" } },
-            },
-          },
+          query: { ref: "q", params: { status: { $state: "/f" } } },
           props: { columns: [{ key: "x", label: "X" }] },
         },
       ],
@@ -223,8 +207,20 @@ describe("createNotebookRuntime", () => {
       columns: [],
       rows: [],
     }));
+    const rawNb: Notebook = {
+      version: 1,
+      title: "raw",
+      cells: [
+        {
+          id: "t",
+          lens: "Table",
+          query: { rawGq: "query q() { match { $d: Decision } return { $d.slug } }" },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
     const runtime = createNotebookRuntime({
-      notebook: NOTEBOOK,
+      notebook: rawNb,
       source: fakeSource({
         capabilities: { ...FULL_CAPS, rawGq: false },
         read,
@@ -254,26 +250,20 @@ describe("createNotebookRuntime", () => {
     const nb: Notebook = {
       version: 1,
       title: "x",
-      fixture: "./f.json",
       cells: [
         {
           id: "filtered",
           lens: "Table",
           query: {
-            fixture: {
-              kind: "nodes",
-              where: {
-                type: "Decision",
-                status: { $state: "/filters/status" },
-              },
-            },
+            ref: "decisions",
+            params: { status: { $state: "/filters/status" } },
           },
           props: { columns: [{ key: "id", label: "ID" }] },
         },
         {
           id: "static",
           lens: "Table",
-          query: { fixture: { kind: "nodes", where: { type: "Issue" } } },
+          query: { ref: "issues" },
           props: { columns: [{ key: "id", label: "ID" }] },
         },
       ],
@@ -305,19 +295,15 @@ describe("createNotebookRuntime", () => {
     const nb: Notebook = {
       version: 1,
       title: "x",
-      fixture: "./f.json",
       cells: [
         {
           id: "filtered",
           lens: "Table",
           query: {
-            fixture: {
-              kind: "nodes",
-              where: {
-                type: "Decision",
-                status: { $state: "/filters/status" },
-                urgency: { $state: "/filters/urgency" },
-              },
+            ref: "decisions",
+            params: {
+              status: { $state: "/filters/status" },
+              urgency: { $state: "/filters/urgency" },
             },
           },
           props: { columns: [{ key: "id", label: "ID" }] },
@@ -353,17 +339,11 @@ describe("createNotebookRuntime", () => {
     const nb: Notebook = {
       version: 1,
       title: "x",
-      fixture: "./f.json",
       cells: [
         {
           id: "filtered",
           lens: "Table",
-          query: {
-            fixture: {
-              kind: "nodes",
-              where: { type: "Decision", status: { $state: "/f" } },
-            },
-          },
+          query: { ref: "decisions", params: { status: { $state: "/f" } } },
           props: { columns: [{ key: "x", label: "X" }] },
         },
       ],
@@ -591,13 +571,12 @@ function actionListNotebook(target: {
   return {
     version: 1,
     title: "review",
-    fixture: "./f.json",
     cells: [
       {
         id: "review",
         lens: "ActionList",
         query: {
-          fixture: { kind: "nodes", where: { type: "PolicyClause" } },
+          ref: "policy_clauses",
           ...(target.branch !== undefined ? { branch: target.branch } : {}),
           ...(target.snapshot !== undefined ? { snapshot: target.snapshot } : {}),
         },

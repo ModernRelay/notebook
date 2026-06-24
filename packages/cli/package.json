@@ -9,7 +9,8 @@
   },
   "bin": {
     "notebook": "./dist/cli.js",
-    "mr-notebook": "./dist/cli.js"
+    "mr-notebook": "./dist/cli.js",
+    "omnigraph-notebook": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -33,7 +34,6 @@
   "devDependencies": {
     "@modernrelay/notebook-core": "workspace:*",
     "@modernrelay/notebook-client": "workspace:*",
-    "@modernrelay/notebook-fixture": "workspace:*",
     "@modernrelay/notebook-tui": "workspace:*",
     "@modernrelay/notebook-web": "workspace:*",
     "tsup": "^8.5.0",

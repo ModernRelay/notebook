@@ -7,10 +7,20 @@ export const TableAuthorPropsSchema = z.object({
         key: z.string().min(1),
         label: z.string().min(1),
         format: z.enum(["text", "number", "json"]).optional(),
+        /** Wrap long prose instead of clipping it to one line. */
+        wrap: z.boolean().optional(),
       }),
     )
     .min(1),
   dense: z.boolean().optional(),
+  /**
+   * Make rows clickable: on click, write the row's `select_column` value to
+   * this JSON-pointer state path (e.g. "/selected"). Another cell (a Card)
+   * can read it via `$state` to show the selected node's detail.
+   */
+  select_state: z.string().optional(),
+  /** Column whose value is written to `select_state` on row click. */
+  select_column: z.string().optional(),
 });
 export type TableAuthorProps = z.infer<typeof TableAuthorPropsSchema>;
 

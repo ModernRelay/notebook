@@ -1,36 +1,31 @@
 import { parseNotebook } from "@modernrelay/notebook-core";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
 import type { Source } from "@modernrelay/notebook-core";
-import { FixtureSource, parseFixture } from "@modernrelay/notebook-fixture";
 
 import defaultServerNotebookYaml from "../../../examples/company-server.notebook.yaml?raw";
-import defaultFixtureNotebookYaml from "../../../examples/company.notebook.yaml?raw";
-import defaultFixtureJson from "../../../examples/fixtures/company-context.json?raw";
 
 export interface AppConfig {
   notebook: ReturnType<typeof parseNotebook>;
   source: Source;
   label: string;
-  mode: "server" | "fixture";
 }
 
 function readToken(): string | undefined {
+  // Only an explicit `?token=` (persisted for direct, non-proxy server mode).
+  // No default token: through the `view` BFF the proxy injects the server-side
+  // token and strips any client-supplied Authorization, so the browser holds
+  // none of its own (canon §4.7).
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get("token");
   if (fromUrl) {
     window.localStorage.setItem("omnigraph_token", fromUrl);
     return fromUrl;
   }
-  return window.localStorage.getItem("omnigraph_token") ?? "devtoken";
+  return window.localStorage.getItem("omnigraph_token") ?? undefined;
 }
 
 export async function buildConfig(): Promise<AppConfig> {
   const url = new URL(window.location.href);
-  const requestedMode = url.searchParams.get("mode");
-  const mode =
-    requestedMode === "fixture" || requestedMode === "server"
-      ? requestedMode
-      : undefined;
   const notebookParam = url.searchParams.get("notebook");
   const notebookUrl =
     notebookParam !== null ? new URL(notebookParam, window.location.href) : null;
@@ -38,29 +33,8 @@ export async function buildConfig(): Promise<AppConfig> {
   const notebookYaml =
     notebookUrl !== null
       ? await fetchText(notebookUrl)
-      : mode === "fixture"
-        ? defaultFixtureNotebookYaml
-        : defaultServerNotebookYaml;
+      : defaultServerNotebookYaml;
   const notebook = parseNotebook(notebookYaml);
-  const resolvedMode: "server" | "fixture" =
-    mode ?? (notebook.fixture ? "fixture" : "server");
-
-  if (resolvedMode === "fixture") {
-    if (!notebook.fixture) {
-      throw new Error("Fixture mode requires top-level `fixture:` in notebook.");
-    }
-    const rawFixture =
-      notebookUrl === null
-        ? defaultFixtureJson
-        : await fetchText(new URL(notebook.fixture, notebookUrl));
-    const fixture = parseFixture(JSON.parse(rawFixture), notebook.fixture);
-    return {
-      notebook,
-      source: new FixtureSource(fixture),
-      label: `fixture: ${notebook.fixture}`,
-      mode: "fixture",
-    };
-  }
 
   const serverParam = url.searchParams.get("server") ?? notebook.server;
   // A relative server (e.g. `?server=/og`, the dev-proxy same-origin path)
@@ -76,6 +50,9 @@ export async function buildConfig(): Promise<AppConfig> {
     );
   }
   const branch = url.searchParams.get("branch") ?? undefined;
+  // rawGq is off by default (operator/production context); enable only via the
+  // explicit `?allowRawGq` escape hatch (e.g. `view --allow-raw-gq` forwards it).
+  const allowRawGq = isTruthyParam(url.searchParams.get("allowRawGq"));
   // omnigraph-server 0.7.0+ is cluster-only; reads/writes are graph-scoped.
   const graph = url.searchParams.get("graph") ?? notebook.graph;
   if (!graph) {
@@ -90,10 +67,17 @@ export async function buildConfig(): Promise<AppConfig> {
   });
   return {
     notebook,
-    source: new ServerSource(client, branch ? { branch } : {}),
+    source: new ServerSource(client, {
+      ...(branch ? { branch } : {}),
+      ...(allowRawGq ? { allowRawGq: true } : {}),
+    }),
     label: `server: ${server} · graph: ${graph}${branch ? ` · ${branch}` : ""}`,
-    mode: "server",
   };
+}
+
+/** URL flag truthiness: present and not an explicit off value → true. */
+function isTruthyParam(v: string | null): boolean {
+  return v !== null && v !== "" && v !== "0" && v !== "false";
 }
 
 async function fetchText(url: URL): Promise<string> {

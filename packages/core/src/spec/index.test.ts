@@ -2,25 +2,28 @@ import { describe, it, expect } from "vitest";
 import { parseNotebook } from "./index.js";
 
 describe("parseNotebook", () => {
-  it("parses a fixture-mode notebook", () => {
+  it("parses a server-mode notebook with a catalog query ref", () => {
     const yaml = `
 version: 1
 title: Demo
-fixture: ./fixtures/x.json
+server: http://127.0.0.1:8080
+graph: company
 cells:
   - id: t
     lens: Table
     query:
-      fixture: { kind: nodes, where: { type: Decision }, project: [id, title] }
+      ref: decisions_by_urgency
+      params: { status: { $state: "/filters/status" } }
     props: { columns: [{ key: id, label: ID }] }
 `;
     const nb = parseNotebook(yaml);
-    expect(nb.fixture).toBe("./fixtures/x.json");
+    expect(nb.server).toBe("http://127.0.0.1:8080");
+    expect(nb.graph).toBe("company");
     expect(nb.cells).toHaveLength(1);
-    expect(nb.cells[0]?.query.fixture?.kind).toBe("nodes");
+    expect(nb.cells[0]?.query?.ref).toBe("decisions_by_urgency");
   });
 
-  it("keeps deprecated raw .gq server-mode query.source accepted", () => {
+  it("accepts the raw .gq escape hatch (query.rawGq)", () => {
     const yaml = `
 version: 1
 title: Server
@@ -28,12 +31,12 @@ cells:
   - id: t
     lens: Table
     query:
-      source: "match (n: Decision) return n.id"
+      rawGq: "query q() { match { $d: Decision } return { $d.slug as id } }"
       branch: main
     props: { columns: [{ key: id, label: ID }] }
 `;
     const nb = parseNotebook(yaml);
-    expect(nb.cells[0]?.query.source).toContain("Decision");
+    expect(nb.cells[0]?.query?.rawGq).toContain("Decision");
   });
 
   it("rejects unknown lens", () => {
@@ -42,7 +45,7 @@ cells:
 version: 1
 title: x
 cells:
-  - { id: t, lens: WhirlyGig, query: { source: "x" } }
+  - { id: t, lens: WhirlyGig, query: { ref: q } }
 `),
     ).toThrow();
   });
@@ -55,12 +58,12 @@ title: x
 cells:
   - id: t
     lens: Table
-    query: { source: "x", branch: main, snapshot: v1 }
+    query: { ref: q, branch: main, snapshot: v1 }
 `),
     ).toThrow();
   });
 
-  it("rejects when both query.source and query.fixture are set", () => {
+  it("rejects when both query.ref and query.rawGq are set", () => {
     expect(() =>
       parseNotebook(`
 version: 1
@@ -68,14 +71,12 @@ title: x
 cells:
   - id: t
     lens: Table
-    query:
-      source: "x"
-      fixture: { kind: nodes }
+    query: { ref: q, rawGq: "x" }
 `),
     ).toThrow();
   });
 
-  it("rejects when neither query.source nor query.fixture is set", () => {
+  it("rejects when neither query.ref nor query.rawGq is set", () => {
     expect(() =>
       parseNotebook(`
 version: 1
@@ -88,59 +89,33 @@ cells:
     ).toThrow();
   });
 
-  it("accepts each fixture-query kind", () => {
-    const nodes = `
+  it("rejects a stale top-level fixture: key (strict schema)", () => {
+    expect(() =>
+      parseNotebook(`
 version: 1
 title: x
 fixture: ./f.json
 cells:
-  - { id: t, lens: Table, query: { fixture: { kind: nodes, where: { type: D } } } }
-`;
-    const path = `
+  - { id: t, lens: Table, query: { ref: q } }
+`),
+    ).toThrow();
+  });
+
+  it("rejects an unknown query key (strict schema)", () => {
+    expect(() =>
+      parseNotebook(`
 version: 1
 title: x
-fixture: ./f.json
 cells:
-  - id: p
-    lens: Path
-    query:
-      fixture:
-        kind: path
-        steps:
-          - { var: a, type: A }
-          - { edge: e, var: b, type: B }
-        project:
-          - { var: a.id, as: from }
-          - { literal: e, as: pred }
-          - { var: b.id, as: to }
-`;
-    const ego = `
-version: 1
-title: x
-fixture: ./f.json
-cells:
-  - id: e
-    lens: Subgraph
-    query:
-      fixture:
-        kind: ego
-        center: { type: D, where: { id: x } }
-        out: [foo]
-        project:
-          - { var: center.id, as: id }
-          - { var: edge_type, as: predicate }
-          - { var: neighbor.id, as: neighbor }
-`;
-    expect(parseNotebook(nodes).cells[0]?.query.fixture?.kind).toBe("nodes");
-    expect(parseNotebook(path).cells[0]?.query.fixture?.kind).toBe("path");
-    expect(parseNotebook(ego).cells[0]?.query.fixture?.kind).toBe("ego");
+  - { id: t, lens: Table, query: { ref: q, bogus: 1 } }
+`),
+    ).toThrow();
   });
 
   it("accepts a control cell (no query) with on + visible", () => {
     const yaml = `
 version: 1
 title: Controls
-fixture: ./f.json
 cells:
   - id: filter
     lens: Select
@@ -164,12 +139,53 @@ cells:
     expect(nb.cells[1]?.on?.["press"]?.action).toBe("approve");
   });
 
+  it("rejects a removed overlay field (display, strict schema)", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Card
+    query: { ref: q }
+    display: drawer
+`),
+    ).toThrow();
+  });
+
+  it("parses a cell's layout-grid width", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Grid
+cells:
+  - id: a
+    lens: Table
+    query: { ref: q }
+    width: half
+    props: { columns: [{ key: x, label: X }] }
+`);
+    expect(nb.cells[0]?.width).toBe("half");
+  });
+
+  it("rejects an unknown width (enum)", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Table
+    query: { ref: q }
+    width: quarter
+`),
+    ).toThrow();
+  });
+
   it("rejects a Table cell without a query", () => {
     expect(() =>
       parseNotebook(`
 version: 1
 title: x
-fixture: ./f.json
 cells:
   - { id: t, lens: Table, props: { columns: [{ key: x, label: X }] } }
 `),
@@ -181,12 +197,11 @@ cells:
       parseNotebook(`
 version: 1
 title: x
-fixture: ./f.json
 cells:
   - id: b
     lens: Button
     props: { label: Hi }
-    query: { fixture: { kind: nodes } }
+    query: { ref: q }
 `),
     ).toThrow();
   });
@@ -195,11 +210,10 @@ cells:
     const yaml = `
 version: 1
 title: x
-fixture: ./f.json
 cells:
   - id: t
     lens: Table
-    query: { fixture: { kind: nodes } }
+    query: { ref: q }
 `;
     expect(parseNotebook(yaml).cells[0]?.props).toEqual({});
   });

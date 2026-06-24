@@ -133,7 +133,9 @@ export function App({
           <Text dimColor>{label}</Text>
         </Box>
 
-        {/* Tab strip: all cells, active highlighted */}
+        {/* Tab strip: all cells, active highlighted. The TUI is layout-flat:
+            it ignores a cell's `width` (a web-only layout tier) and renders
+            every cell as a full inline tab. */}
         {cellCount > 0 && (
           <Box marginTop={1}>
             {cells.map((c, i) => (

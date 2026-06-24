@@ -5,6 +5,8 @@ import {
   PathAuthorPropsSchema,
   SubgraphAuthorPropsSchema,
   TableAuthorPropsSchema,
+  TimelineAuthorPropsSchema,
+  CardAuthorPropsSchema,
 } from "@modernrelay/notebook-core";
 import type { ZodType } from "zod";
 import { z } from "zod";
@@ -18,12 +20,15 @@ const AUTHOR_PROPS: Record<string, ZodType> = {
   Path: PathAuthorPropsSchema,
   Subgraph: SubgraphAuthorPropsSchema,
   ActionList: ActionListAuthorPropsSchema,
+  Timeline: TimelineAuthorPropsSchema,
+  Card: CardAuthorPropsSchema,
 };
 
 /**
  * Machine-readable description of the catalog: every lens/control and the prop
- * schema a notebook author writes, every action and its param schema, and the
- * query kinds. Lets an agent discover the authoring surface without reading source.
+ * schema a notebook author writes, every action and its param schema, and how a
+ * cell binds a query. Lets an agent discover the authoring surface without
+ * reading source.
  */
 export function catalogJson(): unknown {
   const lenses: Record<string, unknown> = {};
@@ -40,7 +45,15 @@ export function catalogJson(): unknown {
       params: z.toJSONSchema(def.params, { io: "input" }),
     };
   }
-  return { lenses, actions, queryKinds: ["nodes", "path", "ego"] };
+  return {
+    lenses,
+    actions,
+    query: {
+      ref: "Name of a server-owned catalog query (the canonical path).",
+      rawGq: "Raw .gq source — a capability-gated escape hatch; prefer `ref`.",
+      note: "Exactly one of `ref` or `rawGq` per data cell; both accept `params`/`branch`/`snapshot`.",
+    },
+  };
 }
 
 export function catalogCommand(_argv: string[]): number {
