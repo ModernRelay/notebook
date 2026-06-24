@@ -153,21 +153,8 @@ export const CellSchema = z
      */
     visible: z.unknown().optional(),
     /**
-     * Presentation mode (host-shell layout tier, web-first). `inline` (default)
-     * stacks the cell in flow; `drawer`/`modal` render it in an overlay that is
-     * open while `open_state` is truthy. The TUI ignores this and renders inline.
-     */
-    display: z.enum(["inline", "drawer", "modal"]).optional(),
-    /**
-     * JSON-pointer whose truthy value opens this cell's overlay (with `display:
-     * drawer|modal`). Cells sharing an `open_state` render in one overlay; the
-     * close affordance clears this pointer. Typically the selection pointer a
-     * Table writes via `select_state` (e.g. "/selected").
-     */
-    open_state: z.string().optional(),
-    /**
      * In-flow layout width (host-shell layout tier, web-first). The web host
-     * arranges inline cells in a responsive 6-column grid; this sets the cell's
+     * arranges cells in a responsive 6-column canvas grid; this sets the cell's
      * column span — `full` (default, own row), `two-thirds`, `half`, `third`.
      * Cells flow left-to-right and wrap. The TUI ignores this (one cell per tab).
      */

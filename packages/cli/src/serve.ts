@@ -63,6 +63,15 @@ export async function serve(opts: ServeOptions): Promise<void> {
       return;
     }
 
+    // 0. Bare host (no query string) → redirect to the parametrized URL so the
+    // *served* notebook loads over the /og proxy, not the bundled default
+    // (which would talk to the upstream cross-origin and CORS-fail).
+    if (path === "/" && !(req.url ?? "").includes("?")) {
+      const params = notebookParams(opts.connection, opts.allowRawGq === true);
+      res.writeHead(302, { location: `/?${params.toString()}` });
+      res.end();
+      return;
+    }
     // 1. /og/* → BFF reverse proxy (token injected server-side).
     if (path === "/og" || path.startsWith("/og/")) {
       proxyOg(req, res, upstream, opts.connection.token);
@@ -108,11 +117,13 @@ export async function serve(opts: ServeOptions): Promise<void> {
   if (opts.open) openBrowser(url);
 }
 
-function buildOpenUrl(
-  port: number,
-  conn: Connection,
-  allowRawGq: boolean,
-): string {
+/**
+ * Query that points the SPA at the served notebook over the same-origin proxy.
+ * Without these params the app loads its bundled default notebook and talks to
+ * the upstream cross-origin (CORS-blocked), so both the printed URL and the
+ * bare-host redirect carry them.
+ */
+function notebookParams(conn: Connection, allowRawGq: boolean): URLSearchParams {
   const params = new URLSearchParams();
   params.set("notebook", "/notebook.yaml");
   params.set("server", "/og"); // same-origin via the proxy above
@@ -120,7 +131,15 @@ function buildOpenUrl(
   if (conn.branch) params.set("branch", conn.branch);
   // The browser gates rawGq itself (server-side flag → URL → web config).
   if (allowRawGq) params.set("allowRawGq", "1");
-  return `http://127.0.0.1:${port}/?${params.toString()}`;
+  return params;
+}
+
+function buildOpenUrl(
+  port: number,
+  conn: Connection,
+  allowRawGq: boolean,
+): string {
+  return `http://127.0.0.1:${port}/?${notebookParams(conn, allowRawGq).toString()}`;
 }
 
 function sendFile(res: http.ServerResponse, file: string, ext: string): void {

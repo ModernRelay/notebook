@@ -139,24 +139,7 @@ cells:
     expect(nb.cells[1]?.on?.["press"]?.action).toBe("approve");
   });
 
-  it("parses a cell's layout-tier display + open_state", () => {
-    const yaml = `
-version: 1
-title: Detail drawer
-cells:
-  - id: detail
-    lens: Card
-    query: { ref: get_concept }
-    display: drawer
-    open_state: /selected
-    props: { title_column: c.name }
-`;
-    const nb = parseNotebook(yaml);
-    expect(nb.cells[0]?.display).toBe("drawer");
-    expect(nb.cells[0]?.open_state).toBe("/selected");
-  });
-
-  it("rejects an unknown display mode (enum)", () => {
+  it("rejects a removed overlay field (display, strict schema)", () => {
     expect(() =>
       parseNotebook(`
 version: 1
@@ -165,7 +148,7 @@ cells:
   - id: t
     lens: Card
     query: { ref: q }
-    display: popover
+    display: drawer
 `),
     ).toThrow();
   });

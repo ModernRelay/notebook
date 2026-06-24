@@ -1,4 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import {
   createNotebookRuntime,
@@ -30,15 +48,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Overlay } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
-import { SearchIcon } from "lucide-react";
+import { GripVerticalIcon, SearchIcon } from "lucide-react";
 import {
   CommandPalette,
   type CommandSection,
 } from "./components/CommandPalette.js";
 import { useHotkeys, type Hotkey } from "./lib/hotkeys.js";
-import { partitionCells, readPointer, widthToColSpan } from "./layout.js";
+import { widthToColSpan } from "./layout.js";
+import {
+  applyOverrides,
+  clearOverrides,
+  effectiveColSpan,
+  loadOverrides,
+  notebookKey,
+  saveOverrides,
+  spanToColSpan,
+  withOrder,
+  withSpan,
+  type LayoutOverrides,
+} from "./layout-overrides.js";
 
 type ConfigStatus =
   | { kind: "loading" }
@@ -100,6 +129,33 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     string | null
   >(null);
   const [cmdOpen, setCmdOpen] = useState(false);
+
+  // Layout edit mode: browser-local drag-reorder + width-resize, persisted to
+  // localStorage. An override layer over the declared layout; Reset clears it.
+  const [editing, setEditing] = useState(false);
+  const layoutKey = useMemo(() => notebookKey(config.notebook), [config.notebook]);
+  const [overrides, setOverrides] = useState<LayoutOverrides>(() =>
+    loadOverrides(layoutKey),
+  );
+  const updateOverrides = useCallback(
+    (next: LayoutOverrides) => {
+      setOverrides(next);
+      saveOverrides(layoutKey, next);
+    },
+    [layoutKey],
+  );
+  const resetLayout = useCallback(() => {
+    setOverrides({ order: [], spans: {} });
+    clearOverrides(layoutKey);
+  }, [layoutKey]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  // Animate the canvas grid: cards FLIP into place on resize / post-reorder
+  // settle / dependent-card re-resolve. Disabled during an active dnd drag so it
+  // doesn't fight dnd-kit's own transforms (dnd-kit owns the drag).
+  const [gridParent, enableGridAnim] = useAutoAnimate<HTMLDivElement>();
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
@@ -188,9 +244,8 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       handlers={handlers}
     >
       <Shell
-        nav={<Sidebar cells={navCells} />}
         header={
-          <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-border bg-background py-4">
             <div className="min-w-0">
               <h1 className="truncate font-heading text-2xl font-semibold tracking-tight text-foreground">
                 {config.notebook.title}
@@ -203,6 +258,27 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {editing && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetLayout}
+                  className="text-muted-foreground"
+                >
+                  Reset
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing((e) => !e)}
+                aria-pressed={editing}
+                className={cn(editing && "border-primary text-foreground")}
+              >
+                {editing ? "Done" : "Edit layout"}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -235,55 +311,50 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
         )}
         {snapshot.status === "ready" &&
           (() => {
-            // Layout tier: most cells stack inline; cells with `display:
-            // drawer|modal` lift into an overlay keyed by their `open_state`
-            // pointer (cells sharing a pointer share one overlay). The overlay
-            // is open while that pointer is truthy in runtime state — the same
-            // `/selected` a Table writes on row click — and close clears it.
-            const { inline, overlays } = partitionCells(snapshot.cells);
+            // One canvas: every cell is a tile in the responsive 6-column grid.
+            // Dependent cells (queries reading `$state`) re-resolve in place when
+            // a selection changes — no overlay. Browser-local drag/resize
+            // overrides (order + width) layer over the declared layout.
+            const ordered = applyOverrides(snapshot.cells, overrides);
+            const orderedIds = ordered.map((c) => c.cell.id);
+            const handleDragEnd = (e: DragEndEvent): void => {
+              enableGridAnim(true); // dnd-kit handled the drag; animate the settle
+              const { active, over } = e;
+              if (!over || active.id === over.id) return;
+              const from = orderedIds.indexOf(String(active.id));
+              const to = orderedIds.indexOf(String(over.id));
+              if (from < 0 || to < 0) return;
+              updateOverrides(withOrder(overrides, arrayMove(orderedIds, from, to)));
+            };
             return (
-              <>
-                {/* Inline cells flow in a responsive 6-column grid; each cell
-                    spans per its `width` (default full = its own row, so the
-                    no-width case is the old single-column stack). Collapses to
-                    one column below md. */}
-                <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-6">
-                  {inline.map((cell) => (
-                    <CellCard key={cell.cell.id} cell={cell} />
-                  ))}
-                </div>
-                {overlays.map((group) => {
-                  const selected = readPointer(snapshot.state, group.openState);
-                  const title =
-                    typeof selected === "string" && selected
-                      ? humanizeCellId(selected)
-                      : "Details";
-                  return (
-                    <Overlay
-                      key={`${group.variant}:${group.openState}`}
-                      open={Boolean(selected)}
-                      variant={group.variant}
-                      title={title}
-                      onClose={() =>
-                        runtime.applyStateChanges([
-                          { path: group.openState, value: "" },
-                        ])
-                      }
-                    >
-                      <div className="space-y-6">
-                        {group.cells.map((cell) => (
-                          <section key={cell.cell.id} className="space-y-3">
-                            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              {humanizeCellId(cell.cell.id)}
-                            </h3>
-                            <CellBody cell={cell} />
-                          </section>
-                        ))}
-                      </div>
-                    </Overlay>
-                  );
-                })}
-              </>
+              // In edit mode, drag a cell's handle to reorder and its right edge
+              // to resize. Collapses to one column below md.
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={() => enableGridAnim(false)}
+                onDragCancel={() => enableGridAnim(true)}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
+                  <div
+                    ref={gridParent}
+                    className="grid grid-cols-1 items-start gap-6 md:grid-cols-6"
+                  >
+                    {ordered.map((cell) => (
+                      <CellCard
+                        key={cell.cell.id}
+                        cell={cell}
+                        editing={editing}
+                        colSpanClass={effectiveColSpan(cell.cell, overrides)}
+                        onResize={(span) =>
+                          updateOverrides(withSpan(overrides, cell.cell.id, span))
+                        }
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             );
           })()}
 
@@ -304,51 +375,22 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
 }
 
 /** App shell: centered column with an optional left cell-nav and header. */
+/** App shell: a single full-width centered column. The header is sticky; cell
+ *  navigation lives in the ⌘K palette (no always-on sidebar). */
 function Shell({
   children,
-  nav,
   header,
 }: {
   children: React.ReactNode;
-  nav?: React.ReactNode;
   header?: React.ReactNode;
 }): React.ReactElement {
   return (
     <div className="min-h-screen">
-      <div className="mx-auto flex max-w-6xl gap-8 px-6 py-10">
-        {nav}
-        <main className="min-w-0 flex-1">
-          {header}
-          <div className="mt-8">{children}</div>
-        </main>
+      <div className="mx-auto w-full max-w-[96rem] px-6 py-10">
+        {header}
+        <div className="mt-8">{children}</div>
       </div>
     </div>
-  );
-}
-
-function Sidebar({
-  cells,
-}: {
-  cells: Array<{ id: string }>;
-}): React.ReactElement {
-  return (
-    <nav className="sticky top-10 hidden h-fit w-52 shrink-0 lg:block">
-      <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Cells
-      </p>
-      <ul className="space-y-0.5">
-        {cells.map((c) => (
-          <li key={c.id}>
-            <a
-              href={`#${c.id}`}
-              className="block truncate rounded-md px-3 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              {humanizeCellId(c.id)}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
   );
 }
 
@@ -376,54 +418,170 @@ function scrollToTop(): void {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function CellCard({ cell }: { cell: CellExecution }): React.ReactElement {
+function CellCard({
+  cell,
+  editing = false,
+  colSpanClass,
+  onResize,
+}: {
+  cell: CellExecution;
+  editing?: boolean;
+  /** Effective inline col-span class (declared width or a resize override). */
+  colSpanClass?: string;
+  /** Commit a resize (1–6 columns); absent in non-editable contexts. */
+  onResize?: (span: number) => void;
+}): React.ReactElement {
   const isControl =
     cell.cell.lens === "Button" ||
     cell.cell.lens === "Toggle" ||
     cell.cell.lens === "Select";
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: cell.cell.id, disabled: !editing });
+  // Live width preview while dragging the resize handle (committed on pointerup).
+  const [previewSpan, setPreviewSpan] = useState<number | null>(null);
+
+  const span =
+    previewSpan !== null
+      ? spanToColSpan(previewSpan)
+      : (colSpanClass ?? widthToColSpan(cell.cell.width));
+
   return (
-    <Card
-      id={cell.cell.id}
-      className={cn(
-        "scroll-mt-10",
-        widthToColSpan(cell.cell.width),
-        isControl && "bg-card/60",
-      )}
+    <div
+      ref={setNodeRef}
+      data-cell-root
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("relative min-w-0", span, isDragging && "z-10")}
     >
-      <CardHeader>
-        <CardTitle className="text-base">
-          {humanizeCellId(cell.cell.id)}
-        </CardTitle>
-        {cell.pending ? (
-          <CardAction>
-            <UpdatingIndicator />
-          </CardAction>
-        ) : (
-          cell.error === null &&
-          cell.result !== null && (
-            <CardAction>
-              <Badge variant="outline" size="sm" className="font-mono">
-                {cell.result.row_count} row
-                {cell.result.row_count === 1 ? "" : "s"}
-                {" · "}
-                {cell.durationMs}ms
-              </Badge>
-            </CardAction>
-          )
+      <Card
+        id={cell.cell.id}
+        className={cn(
+          "scroll-mt-24",
+          isControl && "bg-card/60",
+          editing && "ring-1 ring-border",
+          isDragging && "opacity-80 shadow-lg",
         )}
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <CellBody cell={cell} />
-      </CardContent>
-    </Card>
+      >
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            {editing && (
+              <button
+                type="button"
+                aria-label="Drag to reorder"
+                className="-ml-1 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVerticalIcon className="size-4" />
+              </button>
+            )}
+            {humanizeCellId(cell.cell.id)}
+          </CardTitle>
+          {cell.pending ? (
+            <CardAction>
+              <UpdatingIndicator />
+            </CardAction>
+          ) : (
+            cell.error === null &&
+            cell.result !== null && (
+              <CardAction>
+                <Badge variant="outline" size="sm" className="font-mono">
+                  {cell.result.row_count} row
+                  {cell.result.row_count === 1 ? "" : "s"}
+                  {" · "}
+                  {cell.durationMs}ms
+                </Badge>
+              </CardAction>
+            )
+          )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <CellBody cell={cell} />
+        </CardContent>
+      </Card>
+      {editing && onResize && (
+        <ResizeHandle
+          onPreview={setPreviewSpan}
+          onCommit={(s) => {
+            setPreviewSpan(null);
+            onResize(s);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Right-edge width-resize handle. Raw pointer events (no resize lib): maps the
+ * pointer's x, relative to the cell's left, onto the 6-column grid and snaps to
+ * a 1–6 span — live-previewing during the drag, committing on release. Sits
+ * inside a `data-cell-root` wrapper whose parent is the grid.
+ */
+function ResizeHandle({
+  onPreview,
+  onCommit,
+}: {
+  onPreview: (span: number) => void;
+  onCommit: (span: number) => void;
+}): React.ReactElement {
+  const last = useRef(6);
+  const spanFor = (clientX: number, handle: HTMLElement): number => {
+    const root = handle.closest("[data-cell-root]") as HTMLElement | null;
+    const grid = root?.parentElement;
+    if (!root || !grid) return last.current;
+    const gap = parseFloat(getComputedStyle(grid).columnGap || "0") || 0;
+    const cols = 6;
+    const colW = (grid.clientWidth - gap * (cols - 1)) / cols;
+    const widthPx = clientX - root.getBoundingClientRect().left;
+    const span = Math.max(
+      1,
+      Math.min(cols, Math.round((widthPx + gap) / (colW + gap))),
+    );
+    last.current = span;
+    return span;
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize width"
+      className="absolute right-0 top-0 hidden h-full w-3 cursor-col-resize touch-none select-none md:block"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const handle = e.currentTarget;
+        handle.setPointerCapture(e.pointerId);
+        // rAF-coalesce: at most one preview update per frame for a fluid resize.
+        let raf = 0;
+        let pendingX = e.clientX;
+        const move = (ev: PointerEvent): void => {
+          pendingX = ev.clientX;
+          if (raf) return;
+          raf = requestAnimationFrame(() => {
+            raf = 0;
+            onPreview(spanFor(pendingX, handle));
+          });
+        };
+        const up = (ev: PointerEvent): void => {
+          if (raf) cancelAnimationFrame(raf);
+          handle.releasePointerCapture(e.pointerId);
+          handle.removeEventListener("pointermove", move);
+          handle.removeEventListener("pointerup", up);
+          onCommit(spanFor(ev.clientX, handle));
+        };
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", up);
+      }}
+    >
+      <div className="absolute right-0.5 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-border" />
+    </div>
   );
 }
 
 /**
  * A cell's interior — inline filter controls + the lens output, with the
- * pending/error/skeleton states. Shared by the inline `CellCard` and the
- * overlay drawer so both render identically.
+ * pending/error/skeleton states. Rendered inside `CellCard`.
  *
  * Re-querying (filter change / mutation re-run) keeps the previous spec
  * visible; we dim the lens output and show an "updating…" cue while the inline

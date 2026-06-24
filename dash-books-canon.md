@@ -283,22 +283,28 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
 - [ ] Typed result envelopes (`rows` / `graph` / `tree`) with schema-derived metadata (pending the decision above).
 - [ ] Auto-render tier from result metadata; explicit `lens:` overrides.
 - [~] Curated, tested web-first component/layout catalog; TUI best-fit/degraded over the same contract.
-      - [x] **2A — layout tier, first primitive.** Cell `display: inline|drawer|modal` + `open_state`
-            JSON-pointer: cells sharing a pointer lift into one overlay, open while that pointer is truthy
-            (the same `/selected` a Table writes on row click), close clears it. Host-shell only — no
-            json-render/spec/runtime change; reuses the selection state + `applyStateChanges`. Web renders
-            the drawer/modal (`web/src/layout.ts` `partitionCells` + `components/ui/drawer.tsx`); the TUI is
-            layout-flat and renders every cell inline. Lenses (Timeline, Card, wrap, click-to-select) landed
-            alongside.
-      - [x] **2D (first slice) — in-flow layout grid.** Cell `width: full|half|third|two-thirds` sets the
-            cell's span in the web host's responsive 6-column inline grid (`web/src/layout.ts`
-            `widthToColSpan` → literal `md:col-span-*`; `App.tsx` inline stack → `grid md:grid-cols-6`).
-            Default `full` = the old single-column stack; halves/thirds sit side-by-side (two-pane
-            master-detail, KPI rows). Complements 2A's overlay tier; host-shell only, TUI ignores it (one
-            cell per tab). Collapses to one column below `md`.
+      - [x] **Canvas of dependent cards (the layout model).** Every cell is a tile on the web host's
+            responsive 6-column grid; **master-detail is expressed by `$state` dependency** — a Table writes
+            `/selected`, dependent cells whose queries read `{ $state: "/selected" }` re-resolve **in place**
+            (the runtime's `dependencyMap` tracks the `$state` edges and re-runs only those cells). This is
+            the coherent center the parked dependency-DAG item pointed at. (An overlay tier — cell
+            `display: drawer|modal` + `open_state`, a `partitionCells`/drawer presentation — was built first,
+            then **removed** as paradigm-breaking: it yanked dependent cards off the canvas into a floating
+            modal. Recoverable from git if ever wanted.)
+      - [x] **In-flow layout grid (`width`).** Cell `width: full|half|third|two-thirds` sets the tile's span
+            in the canvas grid (`web/src/layout.ts` `widthToColSpan` → literal `md:col-span-*`; `App.tsx` →
+            `grid md:grid-cols-6`). Default `full` = its own row; halves/thirds sit side-by-side (two-pane
+            master-detail, KPI rows). Host-shell only, TUI ignores it (one cell per tab); collapses to one
+            column below `md`.
       - [x] **Quote lens.** Renders rows as a blockquote feed — `text_column` + a `source_column · meta…`
             citation (`refs/r2.jpg`) — for highlights/annotations/comments. Utterance-centric, distinct from
             Timeline (event feed). Replaces the cramped 2-column highlights table; web + Ink renderers.
+      - [x] **Interactive arrange (Tier 1).** An "Edit layout" toggle lets you drag-reorder cells (a handle;
+            `@dnd-kit` sortable) and drag a cell's right edge to resize its column span (1–6; raw pointer
+            events). It's a **browser-local override** of the declared order/`width`, persisted to
+            `localStorage` per notebook (`web/src/layout-overrides.ts` — pure `applyOverrides`/`effectiveColSpan`
+            + a `notebookKey`); the YAML stays the source of truth and **Reset** clears it. Width-axis only
+            (height fights content); no YAML write-back (that's a deferred Tier 3); web-only, TUI unaffected.
 - [ ] Extend the catalog by in-tree, reviewed contribution (no third-party/sandboxed lenses); TUI
       renderer or table fallback per component.
 - [ ] Explicit dependency DAG (inputs, controls, query params, reads, cells) — no client expression layer.
