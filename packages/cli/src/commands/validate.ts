@@ -72,8 +72,22 @@ export async function validateCommand(argv: string[]): Promise<number> {
     }
 
     if (loaded.notebook.cells.some((cell) => cell.query?.ref !== undefined)) {
-      const catalog = await client.queries();
-      pushErrors(result, validateCatalogRefs(loaded.notebook, catalog));
+      try {
+        const catalog = await client.queries();
+        pushErrors(result, validateCatalogRefs(loaded.notebook, catalog));
+      } catch (err) {
+        // Distinguish "server unreachable" from a config/source error so the
+        // message says what's actually needed (catalog refs need a live server).
+        pushErrors(result, [
+          {
+            path: "",
+            message: `catalog validation requires a reachable server: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            code: "catalog_unreachable",
+          },
+        ]);
+      }
     }
   } catch (err) {
     pushErrors(result, [
