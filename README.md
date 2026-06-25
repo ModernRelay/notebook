@@ -21,6 +21,17 @@ Two bets make it work:
 - **Typed lenses, not a generic graph viewer** — you name the view you want; the system renders it.
 - **Write once, render anywhere** — the same YAML drives the Ink terminal UI and the React web UI, against a live omnigraph-server (a local cluster in dev, a remote server in prod). It's bidirectional: lenses read the graph, controls and actions write back to it.
 
+## Layout & interaction
+
+Cells render on a **canvas**, not a fixed stack. Each cell declares a `width`
+(`full`/`half`/`third`/`two-thirds`) and flows into a responsive grid; in the
+browser an **Edit layout** toggle lets you drag-reorder and drag-resize tiles,
+persisted per-notebook in `localStorage` (the YAML stays the source of truth, and
+Reset clears it). Cells are **dependent**: a Table writes a selection to `$state`
+and any cell whose query reads it re-resolves *in place* — master-detail with no
+modal. Long cells scroll internally and the header is sticky. Web-first; the
+terminal is layout-flat (one cell per tab, `width` ignored).
+
 ## Install & run (CLI)
 
 The published front door is **`@modernrelay/notebook`** — point it at any notebook YAML:
@@ -56,7 +67,7 @@ global install):
 ```bash
 npx @modernrelay/notebook schema                   # JSON Schema for the notebook YAML
 npx @modernrelay/notebook catalog                  # lens/control/action prop schemas as JSON
-npx @modernrelay/notebook validate nb.yaml --json  # { ok, errors[], warnings? }, exit 0/1
+npx @modernrelay/notebook validate nb.yaml --json  # parse + refs/params vs live catalog → { ok, errors[], warnings? }
 npx @modernrelay/notebook render   nb.yaml         # headless run → cell results as JSON
 ```
 
@@ -77,7 +88,7 @@ pnpm --filter @modernrelay/notebook build        # bundle the CLI (tsup) + web-d
 
 | Package | Purpose |
 |---|---|
-| `@modernrelay/notebook-core` | The engine — start here. Three modules behind one entry: `spec` (Zod YAML schemas + `ref`/`rawGq` query model), `catalog` (`lensComponents`/`lensActions` + `assembleLensSpec`), `runtime` (capability-aware execution, state, mutations). The `@json-render/core` analog. |
+| `@modernrelay/notebook-core` | The engine — start here. Three modules behind one entry: `spec` (Zod YAML schemas + `ref`/`rawGq` query model — raw `.gq` is a capability-gated escape hatch, off by default), `catalog` (`lensComponents`/`lensActions` + `assembleLensSpec`), `runtime` (capability-aware execution, state, mutations). The `@json-render/core` analog. |
 | `@modernrelay/notebook-client` | The only data source — `ServerSource` + a `Client` facade over the `@modernrelay/omnigraph` SDK. |
 | `@modernrelay/notebook-tui` | Ink renderer + the `omnigraph-tui` binary. |
 | `@modernrelay/notebook-web` | Vite + React + Tailwind v4 SPA. |
