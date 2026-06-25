@@ -450,7 +450,9 @@ function CellCard({
     <div
       ref={setNodeRef}
       data-cell-root
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      // Translate only — NOT CSS.Transform, which also applies dnd-kit's
+      // scaleX/scaleY and heavily distorts a dragged card in a mixed-span grid.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn("relative min-w-0", span, isDragging && "z-10")}
     >
       <Card
@@ -599,8 +601,13 @@ function CellBody({ cell }: { cell: CellExecution }): React.ReactElement {
           ))}
         </div>
       )}
+      {/* Cap long content and scroll it inside the card (header stays fixed);
+          overscroll-contain keeps the page from scrolling at the card's end. */}
       <div
-        className={cn("transition-opacity", dimContent && "opacity-50")}
+        className={cn(
+          "max-h-[28rem] overflow-y-auto overscroll-contain transition-opacity",
+          dimContent && "opacity-50",
+        )}
         aria-busy={cell.pending || undefined}
       >
         {cell.error !== null && (

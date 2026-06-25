@@ -17,8 +17,8 @@
 # After this script is done:
 #   pnpm tui examples/company-server.notebook.yaml      # TUI (direct, no CORS)
 #
-#   pnpm --filter @omnigraph/web dev                    # web, then open:
-#   http://127.0.0.1:5173/?mode=server&server=/og       # via the Vite /og proxy
+#   pnpm --filter @modernrelay/notebook-web dev          # web, then open:
+#   http://127.0.0.1:5173/?server=/og&graph=company     # via the Vite /og proxy
 #     (omnigraph-server 0.7.0 no longer sets CORS headers, so the browser must
 #      talk same-origin; the dev proxy in vite.config.ts forwards /og → :8080.)
 #
@@ -116,8 +116,8 @@ Run the TUI:
   pnpm tui examples/company-server.notebook.yaml
 
 Run the web app (same-origin via the Vite /og proxy):
-  pnpm --filter @omnigraph/web dev
-  open 'http://127.0.0.1:5173/?mode=server&server=/og'
+  pnpm --filter @modernrelay/notebook-web dev
+  open 'http://127.0.0.1:5173/?server=/og&graph=${GRAPH_ID}'
 
 Probe the persisted clause status (after pressing Approve in the UI):
   curl -s -H "Content-Type: application/json" \\

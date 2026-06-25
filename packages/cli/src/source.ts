@@ -79,6 +79,7 @@ export function resolveConnection(
 
 export interface BuiltSource {
   source: Source;
+  client: Client;
   connection: Connection;
 }
 
@@ -100,5 +101,5 @@ export function buildSource(
     ...(connection.branch !== undefined ? { branch: connection.branch } : {}),
     ...(opts.allowRawGq ? { allowRawGq: true } : {}),
   });
-  return { source, connection };
+  return { source, client, connection };
 }

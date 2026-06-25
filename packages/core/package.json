@@ -2,7 +2,7 @@
   "name": "@modernrelay/notebook-core",
   "version": "0.0.1",
   "private": true,
-  "description": "Notebook engine: Zod YAML schemas + query DSL, the renderer-agnostic component/action catalog, and the capability-aware runtime. The @json-render/core analog — start here.",
+  "description": "Notebook engine: Zod YAML schemas + ref/rawGq query model, the renderer-agnostic component/action catalog, and the capability-aware runtime. The @json-render/core analog — start here.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",

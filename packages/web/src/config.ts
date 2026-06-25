@@ -10,7 +10,11 @@ export interface AppConfig {
   label: string;
 }
 
-function readToken(): string | undefined {
+function readToken(server: string): string | undefined {
+  // In BFF/proxy mode the browser must hold no default graph token; the Node
+  // proxy owns auth injection and strips any browser-supplied Authorization.
+  if (isSameOriginOgProxy(server)) return undefined;
+
   // Only an explicit `?token=` (persisted for direct, non-proxy server mode).
   // No default token: through the `view` BFF the proxy injects the server-side
   // token and strips any client-supplied Authorization, so the browser holds
@@ -62,7 +66,7 @@ export async function buildConfig(): Promise<AppConfig> {
   }
   const client = new Client({
     baseUrl: server,
-    token: readToken(),
+    token: readToken(server),
     graphId: graph,
   });
   return {
@@ -78,6 +82,19 @@ export async function buildConfig(): Promise<AppConfig> {
 /** URL flag truthiness: present and not an explicit off value → true. */
 function isTruthyParam(v: string | null): boolean {
   return v !== null && v !== "" && v !== "0" && v !== "false";
+}
+
+function isSameOriginOgProxy(server: string): boolean {
+  try {
+    const url = new URL(server);
+    const path = url.pathname.replace(/\/$/, "");
+    return (
+      url.origin === window.location.origin &&
+      (path === "/og" || path.startsWith("/og/"))
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function fetchText(url: URL): Promise<string> {
