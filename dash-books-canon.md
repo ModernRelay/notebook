@@ -11,7 +11,7 @@
 one typed result contract in a browser and a terminal.**
 
 A "dash-book" is a notebook: a YAML document whose cells are typed **lenses** (`Table`, `Path`,
-`Subgraph`, `ActionList`, `Timeline`, `Card`, `Quote`) and **controls** (`Button`, `Toggle`, `Select`). You declare *what slice of
+`Subgraph`, `ActionList`, `Timeline`, `Card`, `Quote`, `Text`) and **controls** (`Button`, `Toggle`, `Select`). You declare *what slice of
 the graph to show and what actions to allow*; you never write UI code. The same YAML drives a
 React/Tailwind web renderer and an Ink terminal renderer from one shared result contract. The browser
 is the first-class rich renderer; the terminal is a useful degradation over the same data and action
@@ -68,11 +68,10 @@ json-render spec each renderer draws.
 - **0.7 cluster-only.** omnigraph-server 0.7.0+ serves every graph under `/graphs/{graph}/…`, so server
   mode requires a graph id. Connection today is ad-hoc: `--server <URL>` / `--graph` / `--token`
   (+ a few env vars).
-- **Interim wart — client still generates queries.** Cells still carry the structured query DSL
-  (`query.fixture` = `nodes`/`path`/`ego`), which `ServerSource` compiles to ad-hoc `.gq` via
-  `translate.ts` (incl. ego decomposition + identifier-sanitizing regexes) and ships as
-  `og.query({ query })`. This is the thing §4 removes. The field is still named `fixture` for
-  historical reasons; that rename rides along with the §4 work.
+- **Named-query reads by default.** Cells bind to server-owned catalog queries with `query.ref`;
+  `ServerSource` invokes them via `og.queries.invoke`. The removed `nodes`/`path`/`ego` DSL no
+  longer exists. Inline `rawGq` is a capability-gated escape hatch, off by default. The remaining
+  client-side `.gq` compiler is only the deferred interim `set_field` mutation path.
 
 ---
 
@@ -264,8 +263,9 @@ strict, single-version schema is safe; no version negotiation or legacy-v1 suppo
       `Authorization`/`Proxy-Authorization` and injects only the server-side token; the browser holds no
       default token (no `devtoken`); the `Client` reads no env (resolution lives only in the operator
       resolver — `OMNIGRAPH_TOKEN`/`OMNIGRAPH_GRAPH_ID` are gone).
-- [~] `notebook validate` parses + capability-checks; resolving `ref`/params against the live catalog
-      (`og.queries.list()`) is still TODO (needs a reachable server).
+- [x] `notebook validate` parses + capability-checks and resolves `ref`/literal params against the
+      live catalog (`og.queries.list()`); dynamic `$state` params are checked for presence, with
+      literal defaults type-checked when present.
 - [x] Strict schema; rejects stale fixture-mode keys (internal tool — no version support).
 - [x] Operator-config connection client (shared `@modernrelay/notebook-client/node` resolver:
       config.yaml + credentials, named servers, keyed tokens, profiles; browser uses the `view` proxy).
@@ -299,6 +299,10 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
       - [x] **Quote lens.** Renders rows as a blockquote feed — `text_column` + a `source_column · meta…`
             citation (`refs/r2.jpg`) — for highlights/annotations/comments. Utterance-centric, distinct from
             Timeline (event feed). Replaces the cramped 2-column highlights table; web + Ink renderers.
+      - [x] **Text lens.** Renders the first row's `text_column` as **Markdown** (`title_column` optional
+            heading) — a node's definition/notes/body as a prose block. Web uses `react-markdown` (raw HTML
+            off → XSS-safe; links open in a new tab); the TUI shows the raw Markdown source. Distinct from
+            Card (labeled fields) and Quote (citation feed).
       - [x] **Interactive arrange (Tier 1).** An "Edit layout" toggle lets you drag-reorder cells (a handle;
             `@dnd-kit` sortable) and drag a cell's right edge to resize its column span (1–6; raw pointer
             events). It's a **browser-local override** of the declared order/`width`, persisted to

@@ -23,6 +23,14 @@ describe("buildConfig", () => {
     expect(config.source.capabilities().rawGq).toBe(true);
   });
 
+  it("does not reuse a browser token for the same-origin /og proxy", async () => {
+    const storage = stubWindow(
+      "http://127.0.0.1:5173/?server=http://127.0.0.1:5173/og&token=tok&graph=acme",
+    );
+    await buildConfig();
+    expect(storage.has("omnigraph_token")).toBe(false);
+  });
+
   it("loads a notebook from the ?notebook= URL", async () => {
     stubWindow("http://127.0.0.1:5173/?notebook=/dash/notebook.yaml&graph=acme");
     const fetch = vi.fn(async (input: URL | string) => {

@@ -29,18 +29,18 @@ export default defineConfig({
         target: process.env.OMNIGRAPH_PROXY_TARGET ?? "http://127.0.0.1:8080",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/og/, ""),
-        ...(process.env.OMNIGRAPH_PROXY_TOKEN
-          ? {
-              configure: (proxy) => {
-                proxy.on("proxyReq", (proxyReq) => {
-                  proxyReq.setHeader(
-                    "authorization",
-                    `Bearer ${process.env.OMNIGRAPH_PROXY_TOKEN}`,
-                  );
-                });
-              },
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("authorization");
+            proxyReq.removeHeader("proxy-authorization");
+            if (process.env.OMNIGRAPH_PROXY_TOKEN) {
+              proxyReq.setHeader(
+                "authorization",
+                `Bearer ${process.env.OMNIGRAPH_PROXY_TOKEN}`,
+              );
             }
-          : {}),
+          });
+        },
       },
     },
   },

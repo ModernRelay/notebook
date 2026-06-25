@@ -1,6 +1,6 @@
 # @modernrelay/notebook
 
-Notebook UI for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each notebook cell is a typed *lens primitive* (Table, Path, Subgraph) rendered from a structured query — not a generic graph viewer.
+Notebook UI for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each notebook cell is a typed *lens primitive* (Table, Path, Subgraph) rendered from a server-owned catalog query — not a generic graph viewer.
 
 One catalog of components, two renderers (terminal and web), one server-backed runtime.
 
@@ -8,7 +8,7 @@ One catalog of components, two renderers (terminal and web), one server-backed r
 
 Turn an OmniGraph graph database into a **read-and-act dashboard you describe in one YAML file** — rendered identically in a terminal and a browser.
 
-Normally you inspect a graph by writing queries and reading JSON, or by building a bespoke UI. A notebook is the layer between: a YAML file that *declares what slices of the graph to show and what actions to allow*, not code. Each cell is a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`) fed by a structured query, or a control (`Select`/`Toggle`/`Button`) that filters state or mutates the graph. See `examples/company-server.notebook.yaml`: a status filter, a decisions table, a `Signal → Decision → Actor` path, an ego subgraph, and a clause list with inline Approve/Reject buttons — no UI code anywhere.
+Normally you inspect a graph by writing queries and reading JSON, or by building a bespoke UI. A notebook is the layer between: a YAML file that *declares what slices of the graph to show and what actions to allow*, not code. Each data cell is a typed lens (`Table`/`Path`/`Subgraph`/`ActionList`/`Timeline`/`Card`/`Quote`/`Text`) fed by `query.ref` to a server-owned `.gq` catalog query, or a control (`Select`/`Toggle`/`Button`) that filters state or dispatches actions. See `examples/company-server.notebook.yaml`: a clause review list with inline Approve/Reject buttons, a decisions table, and a `Signal → Decision` path — no UI code anywhere.
 
 Two bets make it work:
 
@@ -71,7 +71,7 @@ pnpm --filter @modernrelay/notebook build        # bundle the CLI (tsup) + web-d
 
 | Package | Purpose |
 |---|---|
-| `@modernrelay/notebook-core` | The engine — start here. Three modules behind one entry: `spec` (Zod YAML schemas + query DSL), `catalog` (`lensComponents`/`lensActions` + `assembleLensSpec`), `runtime` (capability-aware execution, state, mutations). The `@json-render/core` analog. |
+| `@modernrelay/notebook-core` | The engine — start here. Three modules behind one entry: `spec` (Zod YAML schemas + `ref`/`rawGq` query model), `catalog` (`lensComponents`/`lensActions` + `assembleLensSpec`), `runtime` (capability-aware execution, state, mutations). The `@json-render/core` analog. |
 | `@modernrelay/notebook-client` | The only data source — `ServerSource` + a `Client` facade over the `@modernrelay/omnigraph` SDK. |
 | `@modernrelay/notebook-tui` | Ink renderer + the `omnigraph-tui` binary. |
 | `@modernrelay/notebook-web` | Vite + React + Tailwind v4 SPA. |

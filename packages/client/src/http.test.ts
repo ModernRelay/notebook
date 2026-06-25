@@ -89,6 +89,53 @@ describe("Client (SDK-backed facade)", () => {
     });
   });
 
+  it("reshapes /queries catalog entries to snake_case", async () => {
+    const client = clientWith(
+      fetchReturning(
+        jsonResponse({
+          queries: [
+            {
+              name: "decisions_by_urgency",
+              tool_name: "decisions_by_urgency",
+              mutation: false,
+              description: "Decisions",
+              instruction: null,
+              params: [
+                {
+                  name: "status",
+                  kind: "string",
+                  nullable: true,
+                  item_kind: null,
+                  vector_dim: null,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    await expect(client.queries()).resolves.toEqual({
+      queries: [
+        {
+          name: "decisions_by_urgency",
+          tool_name: "decisions_by_urgency",
+          mutation: false,
+          description: "Decisions",
+          instruction: null,
+          params: [
+            {
+              name: "status",
+              kind: "string",
+              nullable: true,
+              item_kind: null,
+              vector_dim: null,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("wraps a 401 as OmnigraphHttpError matching the permission classifier", async () => {
     const client = clientWith(
       fetchReturning(jsonResponse({ error: "bad token", code: "unauthorized" }, 401)),

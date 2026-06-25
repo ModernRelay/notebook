@@ -3,7 +3,7 @@
  *
  * The SDK owns the HTTP transport, the OpenAPI-faithful types, and typed
  * error classes. This `Client` keeps colombo's stable, snake_case surface
- * (`query`/`mutate`/`branches`/`healthz` + `OmnigraphHttpError`) so the
+ * (`query`/`queries`/`mutate`/`branches`/`healthz` + `OmnigraphHttpError`) so the
  * `ServerSource` adapter, its tests, and the web error-classifier are
  * unaffected by the SDK swap. It reshapes the SDK's camelCase responses
  * back to colombo's shapes and re-wraps thrown SDK errors as
@@ -17,6 +17,7 @@ import {
   type QueryInput as SdkQueryInput,
   type MutationInput as SdkMutationInput,
   type Read as SdkRead,
+  type Queries as SdkQueries,
 } from "@modernrelay/omnigraph";
 
 export interface ClientOptions {
@@ -71,6 +72,39 @@ export interface ChangeOutput {
 
 export interface BranchListOutput {
   branches: string[];
+}
+
+export type ParamKind =
+  | "string"
+  | "bool"
+  | "int"
+  | "bigint"
+  | "float"
+  | "date"
+  | "datetime"
+  | "blob"
+  | "vector"
+  | "list";
+
+export interface ParamDescriptor {
+  name: string;
+  kind: ParamKind;
+  nullable: boolean;
+  item_kind?: ParamKind | null;
+  vector_dim?: number | null;
+}
+
+export interface QueryCatalogEntry {
+  name: string;
+  tool_name: string;
+  mutation: boolean;
+  description?: string | null;
+  instruction?: string | null;
+  params: ParamDescriptor[];
+}
+
+export interface QueriesOutput {
+  queries: QueryCatalogEntry[];
 }
 
 export class OmnigraphHttpError extends Error {
@@ -173,6 +207,31 @@ export class Client {
       };
     } catch (e) {
       throw toHttpError(e, `/queries/${name}`);
+    }
+  }
+
+  async queries(): Promise<QueriesOutput> {
+    this.requireGraph("/queries");
+    try {
+      const r: SdkQueries = await this.og.queries.list();
+      return {
+        queries: r.queries.map((q) => ({
+          name: q.name,
+          tool_name: q.toolName,
+          mutation: q.mutation,
+          ...(q.description !== undefined ? { description: q.description } : {}),
+          ...(q.instruction !== undefined ? { instruction: q.instruction } : {}),
+          params: q.params.map((p) => ({
+            name: p.name,
+            kind: p.kind,
+            nullable: p.nullable,
+            ...(p.itemKind !== undefined ? { item_kind: p.itemKind } : {}),
+            ...(p.vectorDim !== undefined ? { vector_dim: p.vectorDim } : {}),
+          })),
+        })),
+      };
+    } catch (e) {
+      throw toHttpError(e, "/queries");
     }
   }
 

@@ -17,7 +17,7 @@ const fakeResult: QueryResult = {
 };
 
 describe("lensComponents", () => {
-  it("registers all ten components (7 lenses + 3 controls)", () => {
+  it("registers all eleven components (8 lenses + 3 controls)", () => {
     expect(Object.keys(lensComponents).sort()).toEqual([
       "ActionList",
       "Button",
@@ -27,6 +27,7 @@ describe("lensComponents", () => {
       "Select",
       "Subgraph",
       "Table",
+      "Text",
       "Timeline",
       "Toggle",
     ]);
@@ -64,6 +65,19 @@ describe("assembleLensSpec", () => {
     );
     expect(spec.elements["q1"]?.type).toBe("Quote");
     expect((spec.elements["q1"]?.props as { rows: unknown[] }).rows).toEqual(
+      fakeResult.rows,
+    );
+  });
+
+  it("builds a Text spec with rows merged in", () => {
+    const spec = assembleLensSpec(
+      "t1",
+      "Text",
+      { title_column: "from", text_column: "p1" },
+      fakeResult,
+    );
+    expect(spec.elements["t1"]?.type).toBe("Text");
+    expect((spec.elements["t1"]?.props as { rows: unknown[] }).rows).toEqual(
       fakeResult.rows,
     );
   });

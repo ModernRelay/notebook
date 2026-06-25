@@ -51,6 +51,13 @@ import {
   type QuoteRuntimeProps,
 } from "./lenses/quote.js";
 import {
+  TextAuthorPropsSchema,
+  TextRuntimePropsSchema,
+  TextDescription,
+  type TextAuthorProps,
+  type TextRuntimeProps,
+} from "./lenses/text.js";
+import {
   ButtonRuntimePropsSchema,
   ButtonDescription,
 } from "./lenses/button.js";
@@ -70,6 +77,7 @@ export * from "./lenses/action_list.js";
 export * from "./lenses/timeline.js";
 export * from "./lenses/card.js";
 export * from "./lenses/quote.js";
+export * from "./lenses/text.js";
 export * from "./lenses/button.js";
 export * from "./lenses/toggle.js";
 export * from "./lenses/select.js";
@@ -107,6 +115,7 @@ export const lensComponents = {
   Timeline:   { props: TimelineRuntimePropsSchema,   description: TimelineDescription },
   Card:       { props: CardRuntimePropsSchema,       description: CardDescription },
   Quote:      { props: QuoteRuntimePropsSchema,      description: QuoteDescription },
+  Text:       { props: TextRuntimePropsSchema,       description: TextDescription },
   Button:     { props: ButtonRuntimePropsSchema,     description: ButtonDescription },
   Toggle:     { props: ToggleRuntimePropsSchema,     description: ToggleDescription },
   Select:     { props: SelectRuntimePropsSchema,     description: SelectDescription },
@@ -251,6 +260,11 @@ function buildRuntimeProps(
     case "Quote": {
       const author: QuoteAuthorProps = QuoteAuthorPropsSchema.parse(authorProps);
       const runtime: QuoteRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Text": {
+      const author: TextAuthorProps = TextAuthorPropsSchema.parse(authorProps);
+      const runtime: TextRuntimeProps = { ...author, rows: result.rows };
       return runtime as unknown as Record<string, unknown>;
     }
   }

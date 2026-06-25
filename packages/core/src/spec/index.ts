@@ -10,6 +10,7 @@ export const LensKind = z.enum([
   "Timeline",
   "Card",
   "Quote",
+  "Text",
 ]);
 export type LensKind = z.infer<typeof LensKind>;
 
@@ -26,6 +27,7 @@ export const ComponentKind = z.enum([
   "Timeline",
   "Card",
   "Quote",
+  "Text",
   "Button",
   "Toggle",
   "Select",
