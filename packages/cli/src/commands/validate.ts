@@ -49,8 +49,12 @@ export async function validateCommand(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // Structural parse passed. Resolve the same operator-config-backed source
-  // path as view/render, then capability-check and validate catalog refs.
+  // Structural parse passed (errors already returned above, offline). The
+  // remaining checks are intentionally server-bound: a dash-book's value is that
+  // its cells resolve against the server-owned catalog, so `validate` resolves
+  // the same operator-config source as view/render, capability-checks, and
+  // validates catalog refs/params live. A notebook with no resolvable source
+  // fails here by design — the meaningful validation can't run without one.
   const result: ValidateResult = { ok: true, errors: [] };
   const sourceOpts = sourceOptionsFrom(values);
   try {
@@ -74,7 +78,11 @@ export async function validateCommand(argv: string[]): Promise<number> {
     if (loaded.notebook.cells.some((cell) => cell.query?.ref !== undefined)) {
       try {
         const catalog = await client.queries();
-        pushErrors(result, validateCatalogRefs(loaded.notebook, catalog));
+        const { errors, warnings } = validateCatalogRefs(loaded.notebook, catalog);
+        pushErrors(result, errors);
+        if (warnings.length > 0) {
+          result.warnings = [...(result.warnings ?? []), ...warnings];
+        }
       } catch (err) {
         // Distinguish "server unreachable" from a config/source error so the
         // message says what's actually needed (catalog refs need a live server).
@@ -114,8 +122,9 @@ function pushErrors(
 function validateCatalogRefs(
   notebook: Notebook,
   catalog: QueriesOutput,
-): ValidateResult["errors"] {
+): { errors: ValidateResult["errors"]; warnings: string[] } {
   const errors: ValidateResult["errors"] = [];
+  const warnings: string[] = [];
   const queries = new Map(catalog.queries.map((query) => [query.name, query]));
 
   notebook.cells.forEach((cell, index) => {
@@ -138,18 +147,21 @@ function validateCatalogRefs(
         code: "wrong_query_kind",
       });
     }
-    errors.push(...validateParams(cell, index, entry.params));
+    const params = validateParams(cell, index, entry.params);
+    errors.push(...params.errors);
+    warnings.push(...params.warnings);
   });
 
-  return errors;
+  return { errors, warnings };
 }
 
 function validateParams(
   cell: Cell,
   index: number,
   descriptors: ParamDescriptor[],
-): ValidateResult["errors"] {
+): { errors: ValidateResult["errors"]; warnings: string[] } {
   const errors: ValidateResult["errors"] = [];
+  const warnings: string[] = [];
   const basePath = `cells/${index}/query/params`;
   const params = cell.query?.params ?? {};
   const supplied = new Set(Object.keys(params));
@@ -166,7 +178,16 @@ function validateParams(
       continue;
     }
     const literal = literalForValidation(value);
-    if (literal.kind === "dynamic") continue;
+    if (literal.kind === "dynamic") {
+      // Resolves from $state at runtime; validate can't see runtime state. Warn
+      // (don't fail) when a *required* param is bound this way without a default.
+      if (!param.nullable) {
+        warnings.push(
+          `param '${key}' for catalog query '${cell.query?.ref ?? ""}' is required and resolves from $state at runtime; validate can't confirm it will be set`,
+        );
+      }
+      continue;
+    }
     const message = validateParamValue(literal.value, param);
     if (message !== null) {
       errors.push({
@@ -187,7 +208,7 @@ function validateParams(
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 function literalForValidation(

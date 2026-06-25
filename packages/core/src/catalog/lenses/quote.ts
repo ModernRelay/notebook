@@ -8,8 +8,8 @@ import { z } from "zod";
  * the source is a small caption.
  */
 export const QuoteAuthorPropsSchema = z.object({
-  /** Column holding the quotation text (the dominant element). */
-  text_column: z.string().optional(),
+  /** Column holding the quotation text — required (the dominant element). */
+  text_column: z.string().min(1),
   /** Column holding the source citation (e.g. an artifact title). */
   source_column: z.string().optional(),
   /**

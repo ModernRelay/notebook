@@ -10,8 +10,8 @@ import { z } from "zod";
 export const TextAuthorPropsSchema = z.object({
   /** Column used as a heading above the prose (e.g. the node's name). */
   title_column: z.string().optional(),
-  /** Column holding the Markdown body (the dominant element). */
-  text_column: z.string().optional(),
+  /** Column holding the Markdown body — required (a Text card's reason to exist). */
+  text_column: z.string().min(1),
   /** Shown when the query returns no row (e.g. nothing selected yet). */
   empty_text: z.string().optional(),
 });
