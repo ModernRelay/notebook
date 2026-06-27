@@ -36,45 +36,55 @@ export interface StateParam {
 }
 
 /**
- * Every distinct `$state` query parameter a notebook reads, in first-seen order,
- * each with its `default` — or no default when cells declare *conflicting*
- * defaults for the same pointer (so a host chip never shows one while another
- * cell queries with the other). These are the live "parameters" driving the
- * canvas — the values dependent cells re-resolve against. Host shells can surface
- * them (e.g. as copyable selection chips) so they're visible before any click.
+ * Every distinct `$state` query parameter a notebook reads, in first-seen order.
+ * A `default` is surfaced only when *every* binding of the pointer agrees on it
+ * (a cell that declares no default counts as a distinct value); otherwise the
+ * default is undefined, so a host chip never shows a value some readers don't
+ * use. These are the live "parameters" driving the canvas — the values dependent
+ * cells re-resolve against. Host shells can surface them (e.g. as copyable
+ * selection chips) so they're visible before any click.
  */
+/** Sentinel for "this binding declares no default" — a distinct per-cell value
+ *  (that cell resolves to undefined), so a surfaced default requires *every*
+ *  binding of the pointer to agree, not just the ones that declare one. */
+const NO_DEFAULT = Symbol("no-default");
+
 export function notebookStateParams(notebook: Notebook): StateParam[] {
-  const seen = new Map<string, StateParam>();
+  const order: string[] = []; // pointers in first-seen order
+  const defaults = new Map<string, { value: unknown; consistent: boolean }>();
+
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    if (typeof record.$state === "string") {
+      const ptr = record.$state;
+      const d = "default" in record ? record.default : NO_DEFAULT;
+      const existing = defaults.get(ptr);
+      if (!existing) {
+        order.push(ptr);
+        defaults.set(ptr, { value: d, consistent: true });
+      } else if (existing.consistent && existing.value !== d) {
+        existing.consistent = false; // bindings disagree → no single default
+      }
+    }
+    for (const item of Object.values(record)) visit(item);
+  };
+
   for (const cell of notebook.cells) {
     if (isControl(cell) || !cell.query?.params) continue;
-    collectStateParams(cell.query.params, seen);
+    visit(cell.query.params);
   }
-  return [...seen.values()];
-}
 
-function collectStateParams(value: unknown, out: Map<string, StateParam>): void {
-  if (!value || typeof value !== "object") return;
-  if (Array.isArray(value)) {
-    for (const item of value) collectStateParams(item, out);
-    return;
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.$state === "string") {
-    const existing = out.get(record.$state);
-    if (!existing) {
-      out.set(record.$state, { pointer: record.$state, default: record.default });
-    } else if (
-      // Two cells bind the same pointer with *different* declared defaults →
-      // there's no single default to surface, so drop it (a host chip would
-      // otherwise show one while another cell queries with the other).
-      record.default !== undefined &&
-      existing.default !== undefined &&
-      existing.default !== record.default
-    ) {
-      existing.default = undefined;
-    }
-  }
-  for (const item of Object.values(record)) collectStateParams(item, out);
+  return order.map((pointer) => {
+    const e = defaults.get(pointer);
+    const value =
+      e && e.consistent && e.value !== NO_DEFAULT ? e.value : undefined;
+    return { pointer, default: value };
+  });
 }
 
 /** Read the value at a JSON pointer in a state object (undefined if absent). */

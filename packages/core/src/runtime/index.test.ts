@@ -113,7 +113,7 @@ describe("notebookStateParams", () => {
             ref: "q2",
             params: {
               domain: { $state: "/domain", default: "cog" },
-              slug: { $state: "/selected" }, // dup pointer → first default kept
+              slug: { $state: "/selected", default: "abm" }, // same default → kept
             },
           },
           props: { columns: [{ key: "x", label: "X" }] },
@@ -147,6 +147,32 @@ describe("notebookStateParams", () => {
     };
     // No single default to surface → undefined (a host chip shows "—", not a
     // value one cell uses while another queries with the other).
+    expect(notebookStateParams(notebook)).toEqual([
+      { pointer: "/status", default: undefined },
+    ]);
+  });
+
+  it("drops the default when one binding omits it (no-default is a distinct value)", () => {
+    const notebook: Notebook = {
+      version: 1,
+      title: "T",
+      cells: [
+        {
+          id: "a",
+          lens: "Table",
+          query: { ref: "q", params: { s: { $state: "/status", default: "open" } } },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+        {
+          id: "b",
+          lens: "Table",
+          query: { ref: "q2", params: { s: { $state: "/status" } } }, // no default
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
+    // 'a' would query with "open" while 'b' queries with undefined → no agreed
+    // default, so the chip surfaces none.
     expect(notebookStateParams(notebook)).toEqual([
       { pointer: "/status", default: undefined },
     ]);
