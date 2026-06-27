@@ -1,92 +1,57 @@
-import { describe, it, expect } from "vitest";
-import type { CellExecution, Notebook } from "@modernrelay/notebook-core";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import type { Notebook } from "@modernrelay/notebook-core";
 import {
-  applyOverrides,
-  effectiveColSpan,
-  spanToColSpan,
-  clampSpan,
+  cardColor,
+  EMPTY_OVERRIDES,
+  isHidden,
+  loadOverrides,
   notebookKey,
-  withOrder,
-  withSpan,
+  saveOverrides,
+  withColor,
+  withHidden,
+  withLayout,
   type LayoutOverrides,
 } from "./layout-overrides.js";
 
-const cell = (id: string): CellExecution =>
-  ({ cell: { id, lens: "Card" } }) as CellExecution;
-const ids = (cs: CellExecution[]): string[] => cs.map((c) => c.cell.id);
 const O = (o: Partial<LayoutOverrides>): LayoutOverrides => ({
-  order: [],
-  spans: {},
+  layout: {},
+  hidden: [],
+  colors: {},
   ...o,
 });
 
-describe("applyOverrides", () => {
-  const inline = [cell("a"), cell("b"), cell("c")];
-
-  it("is a no-op with no saved order", () => {
-    expect(ids(applyOverrides(inline, O({})))).toEqual(["a", "b", "c"]);
-  });
-
-  it("reorders by saved order, appending unranked cells in natural order", () => {
-    expect(ids(applyOverrides(inline, O({ order: ["c", "a"] })))).toEqual([
-      "c",
-      "a",
-      "b",
+describe("withLayout", () => {
+  it("merges RGL items by `i`, preserving other boxes; no-mutate", () => {
+    const base = O({ layout: { a: { x: 0, y: 0, w: 6, h: 8 } } });
+    const next = withLayout(base, [
+      { i: "a", x: 2, y: 1, w: 4, h: 5 },
+      { i: "b", x: 0, y: 6, w: 12, h: 10 },
     ]);
-  });
-
-  it("drops saved ids no longer present (reconcile by id)", () => {
-    expect(ids(applyOverrides(inline, O({ order: ["x", "b", "a"] })))).toEqual([
-      "b",
-      "a",
-      "c",
-    ]);
-  });
-
-  it("places a brand-new (unsaved) cell after the ordered ones", () => {
-    const withNew = [cell("a"), cell("b"), cell("new")];
-    expect(ids(applyOverrides(withNew, O({ order: ["b", "a"] })))).toEqual([
-      "b",
-      "a",
-      "new",
-    ]);
+    expect(next.layout).toEqual({
+      a: { x: 2, y: 1, w: 4, h: 5 },
+      b: { x: 0, y: 6, w: 12, h: 10 },
+    });
+    expect(base.layout).toEqual({ a: { x: 0, y: 0, w: 6, h: 8 } }); // unchanged
   });
 });
 
-describe("span helpers", () => {
-  it("clamps and rounds to 1–6", () => {
-    expect(clampSpan(0)).toBe(1);
-    expect(clampSpan(9)).toBe(6);
-    expect(clampSpan(3.4)).toBe(3);
-  });
-
-  it("maps spans to literal col-span classes", () => {
-    expect(spanToColSpan(1)).toBe("md:col-span-1");
-    expect(spanToColSpan(4)).toBe("md:col-span-4");
-    expect(spanToColSpan(99)).toBe("md:col-span-6");
-  });
-
-  it("effectiveColSpan: override wins, else declared width", () => {
-    expect(effectiveColSpan({ id: "a" } as never, O({ spans: { a: 2 } }))).toBe(
-      "md:col-span-2",
-    );
-    // no override → declared width mapping (half → col-span-3)
-    expect(
-      effectiveColSpan({ id: "a", width: "half" } as never, O({})),
-    ).toBe("md:col-span-3");
-    // no override, no width → full row
-    expect(effectiveColSpan({ id: "a" } as never, O({}))).toBe("md:col-span-6");
+describe("EMPTY_OVERRIDES", () => {
+  it("is an empty layout/hidden/colors", () => {
+    expect(EMPTY_OVERRIDES).toEqual({ layout: {}, hidden: [], colors: {} });
   });
 });
 
 describe("notebookKey", () => {
-  const nb = (title: string, cellIds: string[]): Notebook =>
-    ({ version: 1, title, cells: cellIds.map((id) => ({ id })) }) as Notebook;
-
-  it("is stable for the same title + cell-id set (order-independent)", () => {
-    expect(notebookKey(nb("X", ["a", "b"]))).toBe(notebookKey(nb("X", ["b", "a"])));
+  const nb = (title: string, ids: string[]): Notebook =>
+    ({ version: 1, title, cells: ids.map((id) => ({ id })) }) as Notebook;
+  it("uses the v2 storage namespace for RGL box layouts", () => {
+    expect(notebookKey(nb("X", ["a"]))).toMatch(/^dashbook:layout:v2:X:/);
   });
-
+  it("is stable for the same title + cell-id set (order-independent)", () => {
+    expect(notebookKey(nb("X", ["a", "b"]))).toBe(
+      notebookKey(nb("X", ["b", "a"])),
+    );
+  });
   it("changes when the cell-id set changes", () => {
     expect(notebookKey(nb("X", ["a", "b"]))).not.toBe(
       notebookKey(nb("X", ["a", "c"])),
@@ -94,12 +59,62 @@ describe("notebookKey", () => {
   });
 });
 
-describe("immutable updaters", () => {
-  it("withOrder / withSpan don't mutate the source", () => {
-    const base = O({ order: ["a"], spans: { a: 2 } });
-    expect(withOrder(base, ["b", "a"]).order).toEqual(["b", "a"]);
-    expect(withSpan(base, "b", 9).spans).toEqual({ a: 2, b: 6 });
-    expect(base.order).toEqual(["a"]); // unchanged
-    expect(base.spans).toEqual({ a: 2 });
+describe("hidden", () => {
+  it("withHidden adds/removes (idempotent); isHidden reflects it", () => {
+    let o = O({});
+    expect(isHidden("a", o)).toBe(false);
+    o = withHidden(o, "a", true);
+    expect(o.hidden).toEqual(["a"]);
+    expect(isHidden("a", o)).toBe(true);
+    o = withHidden(o, "a", true);
+    expect(o.hidden).toEqual(["a"]);
+    o = withHidden(o, "a", false);
+    expect(o.hidden).toEqual([]);
+  });
+  it("withHidden doesn't mutate the source", () => {
+    const base = O({ hidden: ["a"] });
+    withHidden(base, "b", true);
+    expect(base.hidden).toEqual(["a"]);
+  });
+});
+
+describe("colors", () => {
+  it("withColor sets and clears a tint; no-mutate", () => {
+    const base = O({});
+    const a = withColor(base, "x", "amber");
+    expect(a.colors).toEqual({ x: "amber" });
+    expect(base.colors).toEqual({});
+    expect(withColor(a, "x", null).colors).toEqual({});
+  });
+  it("cardColor: override wins, else declared color, else null", () => {
+    const cell = { id: "x", color: "blue" } as never;
+    expect(cardColor(cell, O({ colors: { x: "amber" } }))).toBe("amber");
+    expect(cardColor(cell, O({}))).toBe("blue");
+    expect(cardColor({ id: "y" } as never, O({}))).toBeNull();
+  });
+});
+
+describe("loadOverrides", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("round-trips layout/hidden/colors and rejects a malformed layout", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v);
+        },
+      },
+    });
+    const o = O({
+      layout: { a: { x: 1, y: 2, w: 3, h: 4 } },
+      hidden: ["b"],
+      colors: { c: "rose" },
+    });
+    saveOverrides("k", o);
+    expect(loadOverrides("k")).toEqual(o);
+    // a box with a non-numeric field → the whole layout map is dropped to {}
+    store.set("k2", JSON.stringify({ layout: { a: { x: "no", y: 0, w: 1, h: 1 } } }));
+    expect(loadOverrides("k2").layout).toEqual({});
   });
 });

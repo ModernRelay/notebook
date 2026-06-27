@@ -1,5 +1,7 @@
 import React from "react";
 import type { CardRuntimeProps } from "@modernrelay/notebook-core";
+import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/ui/copy-button";
 
 interface ComponentCtx<P> {
   props: P;
@@ -25,20 +27,40 @@ export function Card({
     p.fields ??
     Object.keys(row)
       .filter((k) => k !== p.title_column)
-      .map((k) => ({ key: k, label: undefined as string | undefined }));
+      .map((k) => ({
+        key: k,
+        label: undefined as string | undefined,
+        copy: false,
+        badge: false,
+      }));
   const title = p.title_column ? fmt(row[p.title_column]) : "";
+  // Frameless: the cell card is the only frame (no inner border/padding).
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div>
       {title && (
         <h3 className="mb-3 text-base font-semibold text-foreground">{title}</h3>
       )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        {fields.map((f) => (
-          <React.Fragment key={f.key}>
-            <dt className="text-muted-foreground">{f.label ?? f.key}</dt>
-            <dd className="font-medium text-foreground">{fmt(row[f.key])}</dd>
-          </React.Fragment>
-        ))}
+        {fields.map((f) => {
+          const value = fmt(row[f.key]);
+          return (
+            <React.Fragment key={f.key}>
+              <dt className="text-muted-foreground">{f.label ?? f.key}</dt>
+              <dd className="group font-medium text-foreground">
+                {f.badge ? (
+                  value ? <Badge variant="secondary">{value}</Badge> : null
+                ) : f.copy ? (
+                  <span className="inline-flex items-center gap-1">
+                    {value}
+                    <CopyButton value={value} />
+                  </span>
+                ) : (
+                  value
+                )}
+              </dd>
+            </React.Fragment>
+          );
+        })}
       </dl>
     </div>
   );

@@ -133,9 +133,9 @@ export function App({
           <Text dimColor>{label}</Text>
         </Box>
 
-        {/* Tab strip: all cells, active highlighted. The TUI is layout-flat:
-            it ignores a cell's `width` (a web-only layout tier) and renders
-            every cell as a full inline tab. */}
+        {/* Tab strip: all cells, active highlighted. The TUI is layout-flat —
+            it ignores a cell's `width` and `tab` (web-only view tiers) and lists
+            every cell inline; the active cell shows its `tab` as a label. */}
         {cellCount > 0 && (
           <Box marginTop={1}>
             {cells.map((c, i) => (
@@ -225,6 +225,7 @@ function ActiveCellView({
       <Box>
         <Text bold>{cell.cell.id} </Text>
         <Text dimColor>{cell.cell.lens}</Text>
+        {cell.cell.tab && <Text dimColor> · {cell.cell.tab}</Text>}
         {cell.error === null && cell.result !== null && (
           <Text dimColor>
             {" "}

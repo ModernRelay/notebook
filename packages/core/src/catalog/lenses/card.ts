@@ -14,7 +14,16 @@ export const CardAuthorPropsSchema = z.object({
    * `label` defaults to the key.
    */
   fields: z
-    .array(z.object({ key: z.string().min(1), label: z.string().optional() }))
+    .array(
+      z.object({
+        key: z.string().min(1),
+        label: z.string().optional(),
+        /** Render a copy-to-clipboard button next to the value (web only). */
+        copy: z.boolean().optional(),
+        /** Render the value as a subtle badge/chip — for enums (web only). */
+        badge: z.boolean().optional(),
+      }),
+    )
     .optional(),
   /** Shown when the query returns no row (e.g. nothing selected yet). */
   empty_text: z.string().optional(),

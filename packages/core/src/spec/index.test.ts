@@ -181,6 +181,98 @@ cells:
     ).toThrow();
   });
 
+  it("parses a cell's tab", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Tabbed
+cells:
+  - id: a
+    lens: Table
+    tab: Overview
+    query: { ref: q }
+    props: { columns: [{ key: x, label: X }] }
+`);
+    expect(nb.cells[0]?.tab).toBe("Overview");
+  });
+
+  it("rejects an empty tab string", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Table
+    tab: ""
+    query: { ref: q }
+    props: { columns: [{ key: x, label: X }] }
+`),
+    ).toThrow();
+  });
+
+  it("parses a cell's color and Table column badge/align flags", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Tinted
+cells:
+  - id: a
+    lens: Table
+    color: amber
+    query: { ref: q }
+    props:
+      columns:
+        - { key: name, label: Name }
+        - { key: conf, label: Conf, badge: true }
+        - { key: n, label: N, align: right }
+`);
+    expect(nb.cells[0]?.color).toBe("amber");
+    const cols = (nb.cells[0]?.props as { columns: Record<string, unknown>[] })
+      .columns;
+    expect(cols[1]?.badge).toBe(true);
+    expect(cols[2]?.align).toBe("right");
+  });
+
+  it("rejects an unknown card color (enum)", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Table
+    color: chartreuse
+    query: { ref: q }
+    props: { columns: [{ key: x, label: X }] }
+`),
+    ).toThrow();
+  });
+
+  it("parses a cell's height and rejects an unknown one", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Sized
+cells:
+  - id: a
+    lens: Table
+    height: tall
+    query: { ref: q }
+    props: { columns: [{ key: x, label: X }] }
+`);
+    expect(nb.cells[0]?.height).toBe("tall");
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - id: t
+    lens: Table
+    height: huge
+    query: { ref: q }
+    props: { columns: [{ key: x, label: X }] }
+`),
+    ).toThrow();
+  });
+
   it("rejects a Table cell without a query", () => {
     expect(() =>
       parseNotebook(`

@@ -64,7 +64,7 @@
 
 :root {
   color-scheme: light;
-  --radius: 0.625rem;
+  --radius: 0.375rem;
 
   /* Fonts wired via @fontsource-variable (imported in main.tsx) — no next/font. */
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
@@ -108,6 +108,17 @@
   --sidebar-primary: var(--color-neutral-800);
   --sidebar-primary-foreground: var(--color-neutral-50);
   --sidebar-ring: var(--color-neutral-400);
+
+  /* Per-card background tints (light) — neutral grayscale + a few accents.
+     Applied by setting `--card: var(--tint-NAME)` inline on a cell. */
+  --tint-slate: var(--color-slate-50);
+  --tint-zinc: var(--color-zinc-100);
+  --tint-stone: var(--color-stone-100);
+  --tint-blue: var(--color-blue-50);
+  --tint-emerald: var(--color-emerald-50);
+  --tint-amber: var(--color-amber-50);
+  --tint-rose: var(--color-rose-50);
+  --tint-violet: var(--color-violet-50);
 }
 
 .dark {
@@ -147,11 +158,26 @@
   --sidebar-primary: var(--color-neutral-100);
   --sidebar-primary-foreground: var(--color-neutral-800);
   --sidebar-ring: var(--color-neutral-400);
+
+  /* Per-card tints (dark) — the hue mixed subtly into the dark card surface. */
+  --tint-slate: color-mix(in oklab, var(--card), var(--color-slate-400) 10%);
+  --tint-zinc: color-mix(in oklab, var(--card), var(--color-zinc-400) 10%);
+  --tint-stone: color-mix(in oklab, var(--card), var(--color-stone-400) 10%);
+  --tint-blue: color-mix(in oklab, var(--card), var(--color-blue-500) 16%);
+  --tint-emerald: color-mix(in oklab, var(--card), var(--color-emerald-500) 16%);
+  --tint-amber: color-mix(in oklab, var(--card), var(--color-amber-500) 16%);
+  --tint-rose: color-mix(in oklab, var(--card), var(--color-rose-500) 16%);
+  --tint-violet: color-mix(in oklab, var(--card), var(--color-violet-500) 16%);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /* Base scale: the whole UI is rem-sized, so this zooms text + spacing together.
+     Default browser root is 16px; bump it so the dashboard reads larger. */
+  html {
+    font-size: 18px;
   }
   body {
     @apply bg-background font-sans text-foreground;
@@ -162,4 +188,33 @@
   pre {
     font-family: var(--font-mono);
   }
+}
+
+/* react-grid-layout — theme the drop placeholder + drag/resize affordances to
+   our tokens (RGL's css ships the handle positioning + a red placeholder). */
+.react-grid-item.react-grid-placeholder {
+  background: var(--primary);
+  border-radius: var(--radius-lg);
+  opacity: 0.12;
+}
+.react-grid-item.react-draggable-dragging,
+.react-grid-item.resizing {
+  z-index: 20;
+}
+.react-grid-item.react-draggable-dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  opacity: 0.97;
+}
+/* Resize handles are rendered natively via RGL's `resizeHandle` render-prop
+   (App.tsx `ResizeGrip`) — our own styled element, not the default corner SVG. */
+
+/* Tinted cards: derive hover/selected/border/secondary from the tint + the theme
+   foreground, so interactive states stay in the tint family in BOTH themes
+   (light → a darker tint, dark → a lighter tint). `--card` is set inline to the
+   tint; `data-tinted` marks the wrapper. Untinted cards keep the neutral theme. */
+[data-tinted] {
+  --muted: color-mix(in oklab, var(--card), var(--foreground) 6%);
+  --accent: color-mix(in oklab, var(--card), var(--foreground) 10%);
+  --secondary: color-mix(in oklab, var(--card), var(--foreground) 6%);
+  --border: color-mix(in oklab, var(--card), var(--foreground) 14%);
 }

@@ -291,11 +291,13 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
             `display: drawer|modal` + `open_state`, a `partitionCells`/drawer presentation — was built first,
             then **removed** as paradigm-breaking: it yanked dependent cards off the canvas into a floating
             modal. Recoverable from git if ever wanted.)
-      - [x] **In-flow layout grid (`width`).** Cell `width: full|half|third|two-thirds` sets the tile's span
-            in the canvas grid (`web/src/layout.ts` `widthToColSpan` → literal `md:col-span-*`; `App.tsx` →
-            `grid md:grid-cols-6`). Default `full` = its own row; halves/thirds sit side-by-side (two-pane
-            master-detail, KPI rows). Host-shell only, TUI ignores it (one cell per tab); collapses to one
-            column below `md`.
+      - [x] **Canvas grid (`width` + `height`).** The web canvas is **react-grid-layout** (official v2,
+            12-column, fixed `rowHeight`; `web/src/layout.ts` `widthToCols`/`heightToRows`/`lensDefaultRows`
+            + `buildTabLayout`). A cell's declared `width: full|half|third|two-thirds` → starting column count
+            and `height: short|medium|tall` (or a per-lens default) → starting row span; `buildTabLayout`
+            flows them left-to-right into the initial arrangement. Cards are **fixed-height tiles** (content
+            taller than the box scrolls inside). Host-shell only; TUI ignores both; collapses to one column on
+            narrow viewports.
       - [x] **Quote lens.** Renders rows as a blockquote feed — `text_column` + a `source_column · meta…`
             citation (`refs/r2.jpg`) — for highlights/annotations/comments. Utterance-centric, distinct from
             Timeline (event feed). Replaces the cramped 2-column highlights table; web + Ink renderers.
@@ -303,12 +305,49 @@ the auto tier and output-binding validation; until it ships, v1 uses author-decl
             heading) — a node's definition/notes/body as a prose block. Web uses `react-markdown` (raw HTML
             off → XSS-safe; links open in a new tab); the TUI shows the raw Markdown source. Distinct from
             Card (labeled fields) and Quote (citation feed).
-      - [x] **Interactive arrange (Tier 1).** An "Edit layout" toggle lets you drag-reorder cells (a handle;
-            `@dnd-kit` sortable) and drag a cell's right edge to resize its column span (1–6; raw pointer
-            events). It's a **browser-local override** of the declared order/`width`, persisted to
-            `localStorage` per notebook (`web/src/layout-overrides.ts` — pure `applyOverrides`/`effectiveColSpan`
-            + a `notebookKey`); the YAML stays the source of truth and **Reset** clears it. Width-axis only
-            (height fights content); no YAML write-back (that's a deferred Tier 3); web-only, TUI unaffected.
+      - [x] **Interactive arrange (react-grid-layout).** An "Edit layout" toggle enables RGL's drag (by the
+            card's grip handle) + **both-axis resize** (edge/corner handles); **vertical compaction** floats
+            cards up to fill gaps. Each card's `{x,y,w,h}` box is a **browser-local override** persisted to
+            `localStorage` per notebook (`web/src/layout-overrides.ts` — `withLayout`/`cardColor`/`withHidden`
+            + a `notebookKey`); the YAML stays the source of truth and **Reset** clears it. Persists only
+            deliberate desktop edits (`sameLayout` guard avoids an `onLayoutChange` feedback loop). Replaced
+            the prior `@dnd-kit` sortable + raw-pointer width-resize + `@formkit/auto-animate` engine (RGL
+            removed `findDOMNode` in 2021 → React-19-safe, proven by `web/src/rgl-smoke.test.tsx`). Web-only,
+            TUI unaffected.
+      - [x] **Hidable cards.** In Edit mode an eye-off button hides a cell from the canvas; a header
+            **"Hidden (N)"** control restores them (or "Show all"). Another browser-local override
+            (`layout-overrides.ts` `hidden[]` / `withHidden` / `isHidden`), persisted + cleared by Reset.
+            Hidden cells still execute (render-only hide); web-only.
+      - [x] **`copy` field flag.** A Table column or Card field with `copy: true` renders a
+            copy-to-clipboard button next to the value (`web/components/ui/copy-button.tsx`); web-only, the
+            TUI ignores it.
+      - [x] **Tabs (`tab`).** A per-cell `tab: <name>` string partitions the one flat cell list into named
+            pages in the shell — a **spec-level view tier**, not a catalog component. The web header grows a
+            sticky tab bar (distinct `tab` values in declaration order; `web/src/layout.ts` `deriveTabs` /
+            `cellTab`); only the active tab's cells render, but **all cells still execute against one shared
+            runtime + state**, so a selection on one tab drives dependent cells on another (cross-tab
+            master-detail). No `tab` anywhere = one canvas (today's behavior); untabbed-with-tabs default onto
+            the first tab. Drag-reorder is scoped to the active tab (`layout-overrides.ts` `reorderSubset`).
+            ⌘K jump switches tabs to reach a cell. TUI is layout-flat: it lists every cell and shows the
+            active cell's `tab` as a label.
+      - [x] **Appearance (fonts + theme).** A global, per-browser preference (`web/src/appearance.ts`,
+            one `dashbook:appearance:v1` key) for **UI font** (Inter / Geist / Urbanist), **mono font**
+            (Geist Mono / JetBrains — drives the mono tables), and **light/dark theme**. Applied by setting
+            `--font-sans`/`--font-heading`/`--font-mono` on `<html>` + the `.dark` class; `main.tsx` applies
+            the persisted value pre-paint (no FOUC). A header "Appearance" menu (reuses the `HiddenMenu`
+            popover); ⌘D theme toggle now persists through it. Web-only.
+      - [x] **Per-card color (`color`).** A per-cell `color:` (neutral `slate`/`zinc`/`stone` + accents
+            `blue`/`emerald`/`amber`/`rose`/`violet`) tints a card. Declared default **plus** a browser-local
+            Edit-mode swatch picker — mirrors `width` + drag-resize: `layout-overrides.ts` `colors`/`withColor`,
+            `cardColor` = override ?? declared ?? none; Reset clears. Applied JIT-free by overriding `--card`
+            inline (`web/src/layout.ts` `tintVar` → `var(--tint-*)` defined in `index.css`), so `bg-card` and
+            tinted table/control surfaces follow; light + dark tints. TUI ignores it.
+      - [x] **Typography harmonization (Tier 1 + 2).** A shared **label token** (`layout.ts` `LABEL`) demotes
+            cell-card titles + unifies table headers as small uppercase labels, so the content title (Card/Text
+            `h3`) is the focal heading. The **Card lens is frameless** (no inner border — the cell card is the
+            only frame); the meta badge is de-noised to plain "N rows" (timing dropped). Tier 2: a `badge`
+            column/field flag renders enums as chips, and numeric Table columns auto right-align with
+            `tabular-nums` (optional `align` override). **Tables stay mono.**
 - [ ] Extend the catalog by in-tree, reviewed contribution (no third-party/sandboxed lenses); TUI
       renderer or table fallback per component.
 - [ ] Explicit dependency DAG (inputs, controls, query params, reads, cells) — no client expression layer.
