@@ -1,0 +1,9 @@
+// Edge mutation — links an Issue to a Decision via the `Raises` edge
+// (Issue -> Decision; see company.pg). This is the general-case proof: an edge
+// has no single @key, so it's identified by BOTH endpoint slugs (`from`/`to`),
+// supplied as typed params. No `where slug = ...` predicate is possible or
+// needed — the server owns the insert. Backs the "Raise to selected decision"
+// ActionList button (`issue` from the clicked row, `decision` from $state).
+query raise_issue_to_decision($issue: String, $decision: String) {
+  insert Raises { from: $issue, to: $decision }
+}

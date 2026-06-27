@@ -44,29 +44,51 @@ export const ActionBindingSchema = z
 export type ActionBinding = z.infer<typeof ActionBindingSchema>;
 
 // ── Mutation DSL ──────────────────────────────────────────────────────────
-// Declarative atomic mutations dispatched by ActionList per-row buttons.
-// The substrate (omnigraph-server `POST /change`, via the SDK) executes one
-// mutation per click. Cell authors declare the shape;
-// the lens fills `target_id` from the row at click time.
+// A cell action's mutation mirrors the cell `query` shape: `ref` (a server-
+// owned catalog mutation, invoked by name) XOR `rawGq` (author-written inline
+// `.gq`, a capability-gated escape hatch), plus typed `params` and an optional
+// optimistic overlay. The client never constructs a write predicate — identity
+// is just a typed param resolved from the clicked row (`$row`) or notebook
+// state (`$state`). See dash-books-canon.md §4.5.
 
-const SetFieldMutationSchema = z.object({
-  kind: z.literal("set_field"),
-  /** Defensive: target node type must match before applying the write. */
-  target_type: z.string().min(1),
-  field: z.string().min(1),
-  value: z.unknown(),
-});
-export type SetFieldMutation = z.infer<typeof SetFieldMutationSchema>;
+/** Optional local overlay applied to the clicked row while the write is in flight. */
+const OptimisticSpecSchema = z
+  .object({ set: z.record(z.string().min(1), z.unknown()) })
+  .strict();
+export type OptimisticSpec = z.infer<typeof OptimisticSpecSchema>;
 
-export const MutationSpecSchema = z.discriminatedUnion("kind", [
-  SetFieldMutationSchema,
-]);
+export const MutationSpecSchema = z
+  .object({
+    /** Server-owned catalog mutation name (its catalog entry has `mutation === true`). */
+    ref: z.string().min(1).optional(),
+    /** Author-written inline `.gq` mutation — capability-gated escape hatch. */
+    rawGq: z.string().min(1).optional(),
+    /** Selects a mutation within a multi-query `rawGq` payload. */
+    name: z.string().optional(),
+    /**
+     * Typed params for the mutation. Each value is a literal, a clicked-row
+     * column ref `{ $row: "<col>" }`, or a state ref `{ $state: "/ptr" }`.
+     */
+    params: z.record(z.string(), z.unknown()).optional(),
+    optimistic: OptimisticSpecSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (m) => Boolean(m.ref) !== Boolean(m.rawGq),
+    "exactly one of mutation.ref or mutation.rawGq must be set",
+  );
 export type MutationSpec = z.infer<typeof MutationSpecSchema>;
 
-/** What the `mutate` action handler receives — spec + the lens-supplied target_id. */
-export const MutationParamsSchema = MutationSpecSchema.and(
-  z.object({ target_id: z.string().min(1) }),
-);
+/**
+ * What the `mutate` action handler receives. The lens supplies the clicked
+ * `row` (source of `$row` params + the optimistic overlay base) and `rowKey`
+ * (the row's `id_column` value — the optimistic overlay key, NOT a graph id).
+ */
+export const MutationParamsSchema = z.object({
+  spec: MutationSpecSchema,
+  row: z.record(z.string(), z.unknown()),
+  rowKey: z.string().min(1),
+});
 export type MutationParams = z.infer<typeof MutationParamsSchema>;
 
 /** Reserved for richer reporting later (rows-affected, version, etc). */

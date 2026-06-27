@@ -75,7 +75,7 @@ export async function validateCommand(argv: string[]): Promise<number> {
       );
     }
 
-    if (loaded.notebook.cells.some((cell) => cell.query?.ref !== undefined)) {
+    if (loaded.notebook.cells.some(cellNeedsCatalog)) {
       try {
         const catalog = await client.queries();
         const { errors, warnings } = validateCatalogRefs(loaded.notebook, catalog);
@@ -128,42 +128,108 @@ function validateCatalogRefs(
   const queries = new Map(catalog.queries.map((query) => [query.name, query]));
 
   notebook.cells.forEach((cell, index) => {
+    // Data-cell read ref: must resolve to a READ query.
     const ref = cell.query?.ref;
-    if (ref === undefined) return;
-    const entry = queries.get(ref);
-    const basePath = `cells/${index}/query`;
-    if (entry === undefined) {
-      errors.push({
-        path: `${basePath}/ref`,
-        message: `catalog query '${ref}' does not exist or is not exposed`,
-        code: "unknown_ref",
-      });
-      return;
+    if (ref !== undefined) {
+      const basePath = `cells/${index}/query`;
+      const entry = queries.get(ref);
+      if (entry === undefined) {
+        errors.push({
+          path: `${basePath}/ref`,
+          message: `catalog query '${ref}' does not exist or is not exposed`,
+          code: "unknown_ref",
+        });
+      } else if (entry.mutation) {
+        // Wrong kind — stop; don't validate params against a mutation's
+        // descriptors (the read cell's params don't apply to it).
+        errors.push({
+          path: `${basePath}/ref`,
+          message: `catalog ref '${ref}' is a stored mutation; data cells require read queries`,
+          code: "wrong_query_kind",
+        });
+      } else {
+        const p = validateParamMap(
+          cell.query?.params ?? {},
+          entry.params,
+          `${basePath}/params`,
+          ref,
+        );
+        errors.push(...p.errors);
+        warnings.push(...p.warnings);
+      }
     }
-    if (entry.mutation) {
-      errors.push({
-        path: `${basePath}/ref`,
-        message: `catalog ref '${ref}' is a stored mutation; data cells require read queries`,
-        code: "wrong_query_kind",
-      });
-    }
-    const params = validateParams(cell, index, entry.params);
-    errors.push(...params.errors);
-    warnings.push(...params.warnings);
+
+    // Action mutations: a `ref` must resolve to a stored MUTATION; `rawGq` is a
+    // capability-gated escape hatch (warn — can't catalog-check it).
+    const actions = cell.props.actions;
+    if (!Array.isArray(actions)) return;
+    actions.forEach((action, aIdx) => {
+      if (!action || typeof action !== "object") return;
+      const mutation = (action as Record<string, unknown>).mutation;
+      if (!mutation || typeof mutation !== "object") return;
+      const m = mutation as { ref?: unknown; rawGq?: unknown; params?: unknown };
+      const mBase = `cells/${index}/props/actions/${aIdx}/mutation`;
+      if (typeof m.rawGq === "string") {
+        warnings.push(
+          `${mBase}.rawGq is a capability-gated escape hatch; prefer a catalog mutation.ref`,
+        );
+        return;
+      }
+      if (typeof m.ref !== "string") return; // schema-invalid; the parse layer catches it
+      const entry = queries.get(m.ref);
+      if (entry === undefined) {
+        errors.push({
+          path: `${mBase}/ref`,
+          message: `catalog mutation '${m.ref}' does not exist or is not exposed`,
+          code: "unknown_ref",
+        });
+        return;
+      }
+      if (!entry.mutation) {
+        // Wrong kind — stop; don't validate the mutation's params against a
+        // read query's descriptors (would emit spurious unknown/missing errors).
+        errors.push({
+          path: `${mBase}/ref`,
+          message: `catalog ref '${m.ref}' is a read query; actions require a stored mutation`,
+          code: "wrong_query_kind",
+        });
+        return;
+      }
+      const mp = validateParamMap(
+        (m.params ?? {}) as Record<string, unknown>,
+        entry.params,
+        `${mBase}/params`,
+        m.ref,
+      );
+      errors.push(...mp.errors);
+      warnings.push(...mp.warnings);
+    });
   });
 
   return { errors, warnings };
 }
 
-function validateParams(
-  cell: Cell,
-  index: number,
+/** A cell needs the live catalog if it reads a `ref` or any action mutates a `ref`. */
+function cellNeedsCatalog(cell: Cell): boolean {
+  if (cell.query?.ref !== undefined) return true;
+  const actions = cell.props.actions;
+  if (!Array.isArray(actions)) return false;
+  return actions.some(
+    (a) =>
+      a !== null &&
+      typeof a === "object" &&
+      typeof (a as { mutation?: { ref?: unknown } }).mutation?.ref === "string",
+  );
+}
+
+function validateParamMap(
+  params: Record<string, unknown>,
   descriptors: ParamDescriptor[],
+  basePath: string,
+  refName: string,
 ): { errors: ValidateResult["errors"]; warnings: string[] } {
   const errors: ValidateResult["errors"] = [];
   const warnings: string[] = [];
-  const basePath = `cells/${index}/query/params`;
-  const params = cell.query?.params ?? {};
   const supplied = new Set(Object.keys(params));
   const byName = new Map(descriptors.map((param) => [param.name, param]));
 
@@ -172,18 +238,18 @@ function validateParams(
     if (param === undefined) {
       errors.push({
         path: `${basePath}/${escapeJsonPointer(key)}`,
-        message: `unknown param '${key}' for catalog query '${cell.query?.ref ?? ""}'`,
+        message: `unknown param '${key}' for catalog query '${refName}'`,
         code: "unknown_param",
       });
       continue;
     }
     const literal = literalForValidation(value);
     if (literal.kind === "dynamic") {
-      // Resolves from $state at runtime; validate can't see runtime state. Warn
-      // (don't fail) when a *required* param is bound this way without a default.
-      if (!param.nullable) {
+      // Resolves at runtime; validate can't see runtime state. A `$row` ref is
+      // reliably present from the clicked row, so only warn for `$state`.
+      if (!param.nullable && literal.source === "state") {
         warnings.push(
-          `param '${key}' for catalog query '${cell.query?.ref ?? ""}' is required and resolves from $state at runtime; validate can't confirm it will be set`,
+          `param '${key}' for catalog query '${refName}' is required and resolves from $state at runtime; validate can't confirm it will be set`,
         );
       }
       continue;
@@ -213,14 +279,20 @@ function validateParams(
 
 function literalForValidation(
   value: unknown,
-): { kind: "literal"; value: unknown } | { kind: "dynamic" } {
+):
+  | { kind: "literal"; value: unknown }
+  | { kind: "dynamic"; source: "state" | "row" } {
+  // `{ $row: col }` resolves from the clicked row at runtime.
+  if (isRecord(value) && "$row" in value) {
+    return { kind: "dynamic", source: "row" };
+  }
   if (isRecord(value) && "$state" in value) {
     return "default" in value
       ? { kind: "literal", value: value.default }
-      : { kind: "dynamic" };
+      : { kind: "dynamic", source: "state" };
   }
   return containsStateExpr(value)
-    ? { kind: "dynamic" }
+    ? { kind: "dynamic", source: "state" }
     : { kind: "literal", value };
 }
 
@@ -228,7 +300,11 @@ function containsStateExpr(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(containsStateExpr);
   const record = value as Record<string, unknown>;
-  return "$state" in record || Object.values(record).some(containsStateExpr);
+  return (
+    "$state" in record ||
+    "$row" in record ||
+    Object.values(record).some(containsStateExpr)
+  );
 }
 
 function validateParamValue(

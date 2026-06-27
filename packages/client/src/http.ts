@@ -210,6 +210,47 @@ export class Client {
     }
   }
 
+  /**
+   * Invoke a server-owned catalog MUTATION by name (`POST /queries/{name}` with
+   * `expectMutation: true`). The mutation body lives in the cluster registry; we
+   * pass only runtime inputs. The untagged `Read | Change` response is a change
+   * envelope here. `snapshot` is intentionally unsupported — the server rejects
+   * it for stored mutations (writes target a branch).
+   */
+  async invokeMutation(
+    name: string,
+    input: { params?: Record<string, unknown>; branch?: string },
+    signal?: AbortSignal,
+  ): Promise<ChangeOutput> {
+    this.requireGraph(`/queries/${name}`);
+    try {
+      const r = (await this.og.queries.invoke(
+        name,
+        {
+          expectMutation: true,
+          ...(input.params !== undefined ? { params: input.params } : {}),
+          ...(input.branch !== undefined ? { branch: input.branch } : {}),
+        },
+        signal ? { signal } : {},
+      )) as {
+        branch: string;
+        queryName: string;
+        affectedNodes: number;
+        affectedEdges: number;
+        actorId?: string | null;
+      };
+      return {
+        branch: r.branch,
+        query_name: r.queryName,
+        affected_nodes: r.affectedNodes,
+        affected_edges: r.affectedEdges,
+        ...(r.actorId != null ? { actor_id: r.actorId } : {}),
+      };
+    } catch (e) {
+      throw toHttpError(e, `/queries/${name}`);
+    }
+  }
+
   async queries(): Promise<QueriesOutput> {
     this.requireGraph("/queries");
     try {

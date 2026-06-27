@@ -1,0 +1,16 @@
+// Policy-clause review actions — server-owned mutations backing the
+// `policy-clause-review` ActionList's Approve/Reject buttons.
+//
+// There is no `mutation` keyword: every executable block is a named `query`,
+// and the `update` body is what makes it a mutation. The notebook invokes
+// these by `ref`, passing the clicked clause's key as `$clause` — the predicate
+// (`where slug = $clause`) lives here, server-side, NOT in the client. The
+// param is named `$clause` (not `slug`) on purpose: the client owns no predicate
+// and never names a key field.
+query approve_policy_clause($clause: String) {
+  update PolicyClause set { status: "approved" } where slug = $clause
+}
+
+query reject_policy_clause($clause: String) {
+  update PolicyClause set { status: "rejected" } where slug = $clause
+}

@@ -55,6 +55,11 @@ log "Using $("$OG_BIN" --version 2>/dev/null || echo omnigraph)"
 
 if [ -f "${CLUSTER_DIR}/__cluster/state.json" ]; then
   log "Reusing existing cluster at ${CLUSTER_DIR} (delete .server-demo to reset)"
+  # Re-sync queries and re-apply so added/edited stored queries (incl. the
+  # approve/reject/raise mutations) register without a full reset. `cluster
+  # apply` is idempotent — it republishes the schema + query catalog.
+  cp -R "$QUERIES_SRC"/. "${CLUSTER_DIR}/queries/"
+  "$OG_BIN" cluster apply --config "$CLUSTER_DIR"
 else
   log "Materializing fresh cluster at ${CLUSTER_DIR}"
   mkdir -p "$CLUSTER_DIR"
@@ -92,7 +97,13 @@ if [ -f "$SERVER_PID_FILE" ] && kill -0 "$(cat "$SERVER_PID_FILE")" >/dev/null 2
   sleep 1
 fi
 
-nohup "$OG_SERVER_BIN" --cluster "$CLUSTER_DIR" --bind "$SERVER_BIND" --unauthenticated \
+# Strip any operator OMNIGRAPH_SERVER_BEARER_TOKEN from the env so
+# --unauthenticated actually takes effect. A configured server token otherwise
+# wins over the flag, booting the server in default-deny mode — which blocks
+# stored-query *invokes* (POST /queries/{name}), so every cell 404s and the
+# Approve/Reject/Raise buttons can't write.
+env -u OMNIGRAPH_SERVER_BEARER_TOKEN \
+  nohup "$OG_SERVER_BIN" --cluster "$CLUSTER_DIR" --bind "$SERVER_BIND" --unauthenticated \
   >"$SERVER_LOG" 2>&1 &
 echo "$!" > "$SERVER_PID_FILE"
 

@@ -24,14 +24,13 @@ import {
 import {
   dependencyMap,
   pointersOverlap,
+  resolveMutationParams,
   resolveParams,
   setAtPointer,
 } from "./resolve.js";
 import {
-  actionListMutationTargetTypes,
   type OptimisticPatch,
-  patchFromMutation,
-  patchKey,
+  patchesFromMutation,
 } from "./mutations.js";
 import { validateNotebookCompatibility } from "./compatibility.js";
 import { errorMessage, isAbortError, stringProp } from "./utils.js";
@@ -58,6 +57,7 @@ class NotebookRuntimeImpl implements NotebookRuntime {
   private readonly optimistic = new Map<string, OptimisticPatch>();
   private disposed = false;
   private generation = 0;
+  private mutationSeq = 0;
   private snapshot: RuntimeSnapshot;
 
   constructor(options: CreateNotebookRuntimeOptions) {
@@ -176,10 +176,19 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       return;
     }
 
-    const params = parsed.data;
-    const patch = patchFromMutation(params);
-    if (patch) {
-      this.optimistic.set(patch.key, patch);
+    const { spec, row, rowKey } = parsed.data;
+    const resolvedParams = resolveMutationParams(
+      spec.params,
+      row,
+      this.snapshot.state,
+    );
+    // Optimistic overlay keys on the originating cell, so we need a cellId.
+    // Each dispatch gets a monotonic seq so a later dispatch on the same key
+    // (Approve→Reject on one row) owns the entry and stale settles no-op.
+    const seq = ++this.mutationSeq;
+    const patches = cellId ? patchesFromMutation(spec, cellId, rowKey, seq) : [];
+    if (patches.length > 0) {
+      for (const patch of patches) this.optimistic.set(patch.key, patch);
       this.rebuildSpecsFromRaw();
       this.notify();
     }
@@ -193,7 +202,7 @@ class NotebookRuntimeImpl implements NotebookRuntime {
 
     try {
       await this.source.mutate(
-        { params, cellId },
+        { params: parsed.data, resolvedParams, cellId },
         {
           cellId,
           readTarget,
@@ -202,15 +211,23 @@ class NotebookRuntimeImpl implements NotebookRuntime {
           signal: controller.signal,
         },
       );
-      if (patch) {
-        this.optimistic.set(patch.key, { ...patch, saving: false });
-        this.rebuildSpecsFromRaw();
+      // Only finalize patches this dispatch still owns — a newer dispatch on the
+      // same key must not be clobbered by our (now-stale) settle.
+      for (const patch of patches) {
+        const cur = this.optimistic.get(patch.key);
+        if (cur?.seq === patch.seq) {
+          this.optimistic.set(patch.key, { ...cur, saving: false });
+        }
       }
+      if (patches.length > 0) this.rebuildSpecsFromRaw();
       this.snapshot = { ...this.snapshot, mutationError: null };
       this.notify();
       this.rerunCells(new Set(dataCellIds(this.notebook)));
     } catch (err) {
-      if (patch) this.optimistic.delete(patch.key);
+      for (const patch of patches) {
+        const cur = this.optimistic.get(patch.key);
+        if (cur?.seq === patch.seq) this.optimistic.delete(patch.key);
+      }
       const message = errorMessage(err);
       this.snapshot = { ...this.snapshot, mutationError: message };
       this.rebuildSpecsFromRaw();
@@ -393,24 +410,25 @@ class NotebookRuntimeImpl implements NotebookRuntime {
   private applyOptimisticPatches(cell: Cell, raw: ReadOutput): QueryResult {
     if (cell.lens !== "ActionList" || this.optimistic.size === 0) return raw;
     const idColumn = stringProp(cell.props, "id_column");
-    const statusField = stringProp(cell.props, "status_field");
-    if (!idColumn || !statusField) return raw;
+    if (!idColumn) return raw;
 
-    const targetTypes = actionListMutationTargetTypes(cell);
-    if (targetTypes.size === 0) return raw;
+    // Collect this cell's in-flight patches, grouped by rowKey → { field: value }.
+    const byRow = new Map<string, Record<string, unknown>>();
+    for (const patch of this.optimistic.values()) {
+      if (patch.cellId !== cell.id) continue;
+      const overlay = byRow.get(patch.rowKey) ?? {};
+      overlay[patch.field] = patch.value;
+      byRow.set(patch.rowKey, overlay);
+    }
+    if (byRow.size === 0) return raw;
 
     let changed = false;
     const rows = raw.rows.map((row) => {
       const id = String(row[idColumn] ?? "");
-      if (!id) return row;
-      for (const targetType of targetTypes) {
-        const patch = this.optimistic.get(patchKey(targetType, id, statusField));
-        if (patch) {
-          changed = true;
-          return { ...row, [statusField]: patch.value };
-        }
-      }
-      return row;
+      const overlay = id ? byRow.get(id) : undefined;
+      if (!overlay) return row;
+      changed = true;
+      return { ...row, ...overlay };
     });
 
     return changed ? { ...raw, rows } : raw;
@@ -420,26 +438,19 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     cell: Cell,
   ): Record<string, unknown> | undefined {
     if (cell.lens !== "ActionList") return undefined;
-    const idColumn = stringProp(cell.props, "id_column");
-    const statusField = stringProp(cell.props, "status_field");
-    const raw = this.rawResults.get(cell.id);
-    const targetTypes = actionListMutationTargetTypes(cell);
+    // Per-row mutation state, keyed by the row's id_column value (rowKey).
     const mutationState: Record<string, { saving: boolean; error?: string }> = {};
-
-    if (raw && idColumn && statusField) {
-      for (const row of raw.rows) {
-        const id = String(row[idColumn] ?? "");
-        if (!id) continue;
-        for (const targetType of targetTypes) {
-          const patch = this.optimistic.get(patchKey(targetType, id, statusField));
-          if (patch) {
-            mutationState[id] = {
-              saving: patch.saving,
-              ...(patch.error !== undefined ? { error: patch.error } : {}),
-            };
-          }
-        }
-      }
+    for (const patch of this.optimistic.values()) {
+      if (patch.cellId !== cell.id) continue;
+      const existing = mutationState[patch.rowKey];
+      mutationState[patch.rowKey] = {
+        saving: (existing?.saving ?? false) || patch.saving,
+        ...(patch.error !== undefined
+          ? { error: patch.error }
+          : existing?.error !== undefined
+            ? { error: existing.error }
+            : {}),
+      };
     }
 
     return {

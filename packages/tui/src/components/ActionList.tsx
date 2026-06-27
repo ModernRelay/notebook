@@ -66,7 +66,7 @@ export function ActionList({
             `[debug] ActionList press: row=${focusedRow} action=${focusedAction} id=${id}\n`,
           );
         }
-        fireAction(actions, act, id, p.runtime?.cell_id);
+        fireAction(actions, act, row, id, p.runtime?.cell_id);
       }
     },
     { isActive: cellFocused },
@@ -191,20 +191,22 @@ export function ActionList({
 }
 
 /**
- * Dispatch one click. If the action descriptor carries a `mutation`, fire
- * the built-in `mutate` action with `{ ...mutation, target_id: id }`.
- * Otherwise fall back to the named state-only action.
+ * Dispatch one click. If the action descriptor carries a `mutation`, fire the
+ * built-in `mutate` action with `{ spec: mutation, row, rowKey: id }` — the
+ * runtime resolves `$row`/`$state` params and invokes the source. Otherwise
+ * fall back to the named state-only action.
  */
 function fireAction(
   actions: ReturnType<typeof useActions>,
   act: ActionDescriptor,
+  row: Record<string, unknown>,
   id: string,
   cellId?: string,
 ): void {
   if (act.mutation) {
     actions.execute({
       action: "mutate",
-      params: { ...act.mutation, target_id: id, __cell_id: cellId },
+      params: { spec: act.mutation, row, rowKey: id, __cell_id: cellId },
     });
   } else if (act.action) {
     actions.execute({ action: act.action, params: { id } });

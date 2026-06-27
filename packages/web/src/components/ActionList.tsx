@@ -25,20 +25,22 @@ const STATUS_VARIANT: Record<string, "success" | "error" | "secondary"> = {
 };
 
 /**
- * Dispatch one click. If the action descriptor carries a `mutation`, fire
- * the built-in `mutate` action with `{ ...mutation, target_id: id }`.
- * Otherwise fall back to the named state-only action.
+ * Dispatch one click. If the action descriptor carries a `mutation`, fire the
+ * built-in `mutate` action with `{ spec: mutation, row, rowKey: id }` — the
+ * runtime resolves `$row`/`$state` params and invokes the source. Otherwise
+ * fall back to the named state-only action.
  */
 function fireAction(
   actions: ReturnType<typeof useActions>,
   act: ActionDescriptor,
+  row: Record<string, unknown>,
   id: string,
   cellId: string | undefined,
 ): void {
   if (act.mutation) {
     actions.execute({
       action: "mutate",
-      params: { ...act.mutation, target_id: id, __cell_id: cellId },
+      params: { spec: act.mutation, row, rowKey: id, __cell_id: cellId },
     });
   } else if (act.action) {
     actions.execute({ action: act.action, params: { id } });
@@ -78,9 +80,15 @@ export function ActionList({
         const saving = mutationState?.saving === true;
         // The "active" action is whichever re-applies the current status — it
         // gets a subdued look so the OTHER action reads as the next click.
-        const currentActionIdx = p.actions.findIndex(
-          (a) => a.mutation && String(a.mutation.value) === status,
-        );
+        // The "active" action re-applies the current status — detect it from the
+        // action's optimistic overlay of the status_field (the old set_field
+        // `value` is gone).
+        const currentActionIdx = p.actions.findIndex((a) => {
+          const f = p.status_field;
+          if (f === undefined) return false;
+          const overlay = a.mutation?.optimistic?.set?.[f];
+          return overlay !== undefined && String(overlay) === status;
+        });
 
         return (
           <li
@@ -132,7 +140,7 @@ export function ActionList({
                     }
                     disabled={saving}
                     aria-pressed={isCurrent}
-                    onClick={() => fireAction(actions, act, id, p.runtime?.cell_id)}
+                    onClick={() => fireAction(actions, act, row, id, p.runtime?.cell_id)}
                   >
                     {act.label}
                   </Button>

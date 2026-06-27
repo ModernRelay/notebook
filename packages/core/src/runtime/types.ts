@@ -2,19 +2,15 @@ import type {
   Cell,
   MutationParams,
   MutationResult,
-  MutationSpec,
   Notebook,
 } from "../spec/index.js";
 import type { LensSpec, QueryResult } from "../catalog/index.js";
 
-export type MutationKind = MutationSpec["kind"];
-
 export interface SourceCapabilities {
-  /** Source can invoke server-owned catalog queries by name (`query.ref`). */
+  /** Source can invoke server-owned catalog queries/mutations by name (`ref`). */
   namedQueries: boolean;
-  /** Source accepts raw `.gq` source (`query.rawGq` escape hatch). */
+  /** Source accepts raw `.gq` source (`rawGq` escape hatch — reads and writes). */
   rawGq: boolean;
-  mutationKinds: readonly MutationKind[];
   branchReads: boolean;
   snapshotReads: boolean;
   branchWrites: boolean;
@@ -55,6 +51,8 @@ export interface ExecutionContext {
 
 export interface MutationCommand {
   params: MutationParams;
+  /** Source-ready param map: `$row`/`$state` already resolved to literals. */
+  resolvedParams: Record<string, unknown>;
   cellId?: string;
 }
 

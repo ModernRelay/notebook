@@ -45,11 +45,24 @@ export function validateNotebookCompatibility(
       errors.push(`${cell.id}: selected source does not support snapshot reads`);
     }
 
+    // Mutations mirror the read gate: `ref` needs named-query support; `rawGq`
+    // is the capability-gated escape hatch (off by default).
     for (const mutation of actionListMutations(cell)) {
-      if (!capabilities.mutationKinds.includes(mutation.kind)) {
+      if (mutation.ref !== undefined && !capabilities.namedQueries) {
         errors.push(
-          `${cell.id}: selected source does not support ${mutation.kind} mutations`,
+          `${cell.id}: selected source does not support named catalog mutations (mutation.ref)`,
         );
+      }
+      if (mutation.rawGq !== undefined) {
+        if (!capabilities.rawGq) {
+          errors.push(
+            `${cell.id}: raw .gq is disabled — enable the dev/CLI escape hatch (--allow-raw-gq or ?allowRawGq) or use a catalog mutation.ref`,
+          );
+        } else {
+          warnings.push(
+            `${cell.id}: mutation.rawGq is a capability-gated escape hatch; prefer a catalog mutation.ref`,
+          );
+        }
       }
     }
   }
