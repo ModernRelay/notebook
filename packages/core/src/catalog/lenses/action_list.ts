@@ -13,10 +13,11 @@ const ActionDescriptorSchema = z
     /** Visual variant. Same vocabulary as Button. */
     variant: z.enum(["default", "primary", "danger"]).optional(),
     /**
-     * Declarative mutation spec. When set, the lens fires the built-in
-     * `mutate` action with `{ ...mutation, target_id: row[id_column] }`.
-     * omnigraph-server (`POST /change`, via the SDK) executes one atomic
-     * mutation per click.
+     * Declarative mutation spec mirroring a cell `query`: `ref` (server-owned
+     * catalog mutation) XOR `rawGq` (inline escape hatch), plus typed `params`
+     * (literals / `{ $row: col }` / `{ $state: ptr }`) and an optional
+     * `optimistic` overlay. When set, the lens fires the built-in `mutate`
+     * action with the clicked row; one atomic commit per click.
      */
     mutation: MutationSpecSchema.optional(),
   })
@@ -71,4 +72,4 @@ export const ActionListRuntimePropsSchema = ActionListAuthorPropsSchema.extend({
 export type ActionListRuntimeProps = z.infer<typeof ActionListRuntimePropsSchema>;
 
 export const ActionListDescription =
-  "List of items where each row carries inline action buttons. Each action descriptor declares either a named `action` (state-only, fires with `{ id: row[id_column] }`) or a declarative `mutation` (atomic source mutation, fires the built-in `mutate` action with the mutation spec + target_id). Optional `status_field` reads the row's status from the data; `status_state` from a state path.";
+  "List of items where each row carries inline action buttons. Each action descriptor declares either a named `action` (state-only, fires with `{ id: row[id_column] }`) or a declarative `mutation` — a `ref` catalog mutation or `rawGq` escape hatch with typed `params` (`{ $row: col }` pulls the clicked row's column, `{ $state: ptr }` reads state) and an optional `optimistic` overlay. Optional `status_field` reads the row's status from the data; `status_state` from a state path.";

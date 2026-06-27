@@ -130,7 +130,7 @@ export const lensComponents = {
  * `approve` / `reject` are demo handler-bound actions. The host renderer
  * (App.tsx) provides their implementations via JSONUIProvider.handlers.
  */
-import { MutationSpecSchema } from "../spec/index.js";
+import { MutationParamsSchema } from "../spec/index.js";
 
 export const lensActions = {
   setState: {
@@ -139,15 +139,16 @@ export const lensActions = {
   },
   /**
    * Atomic mutation against omnigraph-server (via the @modernrelay/omnigraph
-   * SDK). Each invocation is one
-   * commit. The cell author declares the mutation shape via
-   * ActionList.actions[*].mutation; the lens fills target_id from the
-   * row at click time.
+   * SDK). Each invocation is one commit. The cell author declares the mutation
+   * shape via ActionList.actions[*].mutation (a `ref` catalog mutation or a
+   * `rawGq` escape hatch + typed `params`); the lens supplies the clicked
+   * `row` and `rowKey` at click time, and the runtime resolves `$row`/`$state`
+   * params and any optimistic overlay.
    */
   mutate: {
-    params: MutationSpecSchema.and(z.object({ target_id: z.string() })),
+    params: MutationParamsSchema,
     description:
-      "Run one atomic mutation against the source. Params: a MutationSpec union plus `target_id` (the row id, filled in by the lens).",
+      "Run one atomic mutation against the source. Params: { spec: MutationSpec, row, rowKey } — the lens supplies the clicked row; the runtime resolves params and invokes the source.",
   },
 } as const;
 

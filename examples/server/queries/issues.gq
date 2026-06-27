@@ -1,0 +1,27 @@
+// Open issues — backs the `open-issues` ActionList. Projects the @key slug as
+// `id` so the edge mutation can send it back as the `$issue` param.
+query open_issues() {
+  match {
+    $i: Issue { status: "open" }
+  }
+  return {
+    $i.slug as id,
+    $i.title as title,
+    $i.severity as severity
+  }
+}
+
+// Issue → Decision "raises" edges — backs the `issue-raises` Path cell, which
+// re-resolves after the edge mutation so a newly-created link is visible.
+// `Raises` is queried camelCase as `raises` (omnigraph convention).
+query issue_raises() {
+  match {
+    $i: Issue
+    $i raises $d
+  }
+  return {
+    $i.title as issue_title,
+    "raises" as raises_label,
+    $d.title as decision_title
+  }
+}

@@ -1,10 +1,13 @@
-import type { Cell, MutationParams, MutationSpec } from "../spec/index.js";
+import type { Cell, MutationSpec } from "../spec/index.js";
 import { MutationSpecSchema } from "../spec/index.js";
 
 export interface OptimisticPatch {
   key: string;
-  targetType: string;
-  targetId: string;
+  /** Originating cell — the overlay is view-local to it. */
+  cellId: string;
+  /** The clicked row's `id_column` value. An overlay key, NOT a graph id. */
+  rowKey: string;
+  /** A column named in the action's `optimistic.set`. */
   field: string;
   value: unknown;
   saving: boolean;
@@ -24,34 +27,29 @@ export function actionListMutations(cell: Cell): MutationSpec[] {
   return out;
 }
 
-export function actionListMutationTargetTypes(cell: Cell): Set<string> {
-  const out = new Set<string>();
-  for (const mutation of actionListMutations(cell)) {
-    if ("target_type" in mutation) out.add(mutation.target_type);
-  }
-  return out;
+/**
+ * Build the optimistic overlay patches for an in-flight mutation from its
+ * explicit `optimistic.set` block — one patch per overlaid column, keyed by
+ * `(cellId, rowKey, field)`. No `optimistic` block ⇒ no overlay (pending →
+ * re-read). Identity here is the row's `id_column` value (`rowKey`), a
+ * view-local key — never a graph slug or node type.
+ */
+export function patchesFromMutation(
+  spec: MutationSpec,
+  cellId: string,
+  rowKey: string,
+): OptimisticPatch[] {
+  if (!spec.optimistic) return [];
+  return Object.entries(spec.optimistic.set).map(([field, value]) => ({
+    key: patchKey(cellId, rowKey, field),
+    cellId,
+    rowKey,
+    field,
+    value,
+    saving: true,
+  }));
 }
 
-export function patchFromMutation(
-  params: MutationParams,
-): OptimisticPatch | null {
-  switch (params.kind) {
-    case "set_field":
-      return {
-        key: patchKey(params.target_type, params.target_id, params.field),
-        targetType: params.target_type,
-        targetId: params.target_id,
-        field: params.field,
-        value: params.value,
-        saving: true,
-      };
-  }
-}
-
-export function patchKey(
-  targetType: string,
-  targetId: string,
-  field: string,
-): string {
-  return `${targetType}:${targetId}:${field}`;
+export function patchKey(cellId: string, rowKey: string, field: string): string {
+  return `${cellId}:${rowKey}:${field}`;
 }

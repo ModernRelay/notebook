@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNotebook } from "./index.js";
+import { parseNotebook, MutationSpecSchema } from "./index.js";
 
 describe("parseNotebook", () => {
   it("parses a server-mode notebook with a catalog query ref", () => {
@@ -308,5 +308,47 @@ cells:
     query: { ref: q }
 `;
     expect(parseNotebook(yaml).cells[0]?.props).toEqual({});
+  });
+});
+
+describe("MutationSpecSchema", () => {
+  it("accepts a catalog ref mutation with params + optimistic", () => {
+    const r = MutationSpecSchema.safeParse({
+      ref: "approve_clause",
+      params: { clause: { $row: "id" } },
+      optimistic: { set: { status: "approved" } },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a rawGq mutation", () => {
+    const r = MutationSpecSchema.safeParse({
+      rawGq: "query q($id: String){ update Issue set { status: \"closed\" } where slug = $id }",
+      params: { id: { $row: "id" } },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a mutation with both ref and rawGq (exactly-one, mirrors query)", () => {
+    expect(MutationSpecSchema.safeParse({ ref: "r", rawGq: "x" }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a mutation with neither ref nor rawGq", () => {
+    expect(MutationSpecSchema.safeParse({ params: { x: 1 } }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a stale set_field mutation (no kind discriminator anymore)", () => {
+    expect(
+      MutationSpecSchema.safeParse({
+        kind: "set_field",
+        target_type: "PolicyClause",
+        field: "status",
+        value: "approved",
+      }).success,
+    ).toBe(false);
   });
 });

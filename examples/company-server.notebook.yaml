@@ -5,18 +5,21 @@ server: http://127.0.0.1:8080
 # /graphs/{graph}/…. `--graph`/`?graph=` override this.
 graph: company
 
-# Server-mode demo. Each cell binds to a server-owned catalog query by name
-# (`query.ref` → POST /graphs/{graph}/queries/{ref}); the query bodies live in
-# examples/server/queries/*.gq, registered in the cluster. ActionList clicks
-# still go to POST /graphs/{graph}/mutate (one atomic Lance commit per click —
-# the interim set_field write path). Run scripts/server-demo.sh first to boot a
-# local filesystem cluster serving this `graph` with these queries.
+# Server-mode demo. Each data cell binds to a server-owned catalog query by name
+# (`query.ref` → POST /graphs/{graph}/queries/{ref}). Action buttons fire
+# server-owned catalog *mutations* the same way (`mutation.ref` → the same route
+# with expectMutation:true) — the client constructs no `.gq` and no write
+# predicate. Identity is just a typed param pulled from the clicked row
+# (`{ $row: id }`) or notebook state (`{ $state: /sel/decision }`). The query +
+# mutation bodies live in examples/server/queries/*.gq, registered in the
+# cluster. Run scripts/server-demo.sh first.
 
 cells:
 
   - id: policy-clause-review
     lens: ActionList
-    # → examples/server/queries/policy-clauses.gq
+    # → examples/server/queries/policy-clauses.gq (read)
+    #   + policy-clause-actions.gq (approve/reject mutations)
     query: { ref: policy_clauses_for_review }
     props:
       id_column: id
@@ -28,30 +31,59 @@ cells:
         - label: Approve
           variant: primary
           mutation:
-            kind: set_field
-            target_type: PolicyClause
-            field: status
-            value: approved
+            ref: approve_policy_clause
+            params: { clause: { $row: id } }   # clicked row's `id` (the @key slug)
+            optimistic: { set: { status: approved } }
         - label: Reject
           variant: danger
           mutation:
-            kind: set_field
-            target_type: PolicyClause
-            field: status
-            value: rejected
+            ref: reject_policy_clause
+            params: { clause: { $row: id } }
+            optimistic: { set: { status: rejected } }
 
   - id: decisions-by-urgency
     lens: Table
-    # → examples/server/queries/decisions-by-urgency.gq (all decisions, ordered).
-    # Status-filtered variants arrive with the richer catalog-query work
-    # (dash-books-canon.md §4.3 / Phase 2).
+    # → examples/server/queries/decisions-by-urgency.gq. Clicking a row writes
+    #   its slug to /sel/decision — the target endpoint for the edge mutation below.
     query: { ref: decisions_by_urgency }
     props:
+      select_state: /sel/decision
+      select_column: slug
       columns:
         - { key: slug,    label: ID }
         - { key: title,   label: Title }
         - { key: status,  label: Status }
         - { key: urgency, label: Urgency }
+
+  - id: open-issues
+    lens: ActionList
+    # → examples/server/queries/issues.gq (open_issues) + issue-edge-actions.gq.
+    # "Raise" inserts a `Raises` edge (Issue -> Decision) — an EDGE mutation,
+    # keyed by both endpoint slugs, neither of which is a `slug` predicate the
+    # client could build. `issue` comes from the row, `decision` from the
+    # Decisions-table selection (/sel/decision).
+    query: { ref: open_issues }
+    props:
+      id_column: id
+      title_column: title
+      meta_columns: [severity]
+      actions:
+        - label: Raise to selected decision
+          variant: primary
+          mutation:
+            ref: raise_issue_to_decision
+            params:
+              issue: { $row: id }
+              decision: { $state: /sel/decision }
+
+  - id: issue-raises
+    lens: Path
+    # → examples/server/queries/issues.gq (issue_raises). Re-resolves after the
+    #   edge mutation, so a newly-raised Issue → Decision link shows up here.
+    query: { ref: issue_raises }
+    props:
+      steps:
+        - { from_column: issue_title, predicate_column: raises_label, to_column: decision_title }
 
   - id: signal-to-decision
     lens: Path

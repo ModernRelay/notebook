@@ -124,6 +124,43 @@ function resolveExpr(value: unknown, state: Record<string, unknown>): unknown {
   return value;
 }
 
+/**
+ * Resolve a mutation's `params` map for dispatch. Each value is a literal, a
+ * clicked-row column ref `{ $row: "<col>" }`, or a state ref `{ $state }`.
+ * `$row` resolves from the clicked row (which the lens supplies); `$state`
+ * reuses the read-side `resolveExpr`. The result is the final typed param map
+ * forwarded to the source — the source never sees `$row`/`$state`.
+ */
+export function resolveMutationParams(
+  params: Record<string, unknown> | undefined,
+  row: Record<string, unknown>,
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!params) return out;
+  for (const [key, value] of Object.entries(params)) {
+    out[key] = resolveMutationExpr(value, row, state);
+  }
+  return out;
+}
+
+function resolveMutationExpr(
+  value: unknown,
+  row: Record<string, unknown>,
+  state: Record<string, unknown>,
+): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if ("$row" in value) {
+      const col = (value as { $row: unknown }).$row;
+      return typeof col === "string" ? row[col] : undefined;
+    }
+    if ("$state" in value) {
+      return resolveExpr(value, state);
+    }
+  }
+  return value;
+}
+
 function resolveStatePointer(
   state: Record<string, unknown>,
   pointer: string,

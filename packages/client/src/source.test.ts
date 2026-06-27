@@ -15,7 +15,6 @@ describe("ServerSource", () => {
     expect(source.capabilities()).toMatchObject({
       namedQueries: true,
       rawGq: false,
-      mutationKinds: ["set_field"],
       branchReads: true,
       snapshotReads: true,
       branchWrites: true,
@@ -70,14 +69,11 @@ describe("ServerSource", () => {
     await expect(source.read({ cellId: "bad" }, CTX)).rejects.toThrow(/neither/);
   });
 
-  it("uses mutation write target branch from runtime context", async () => {
-    const mutate = vi.fn(async () => ({
-      branch: "review",
-      query_name: "ng_mutate",
-      affected_nodes: 1,
-      affected_edges: 0,
-    }));
-    const source = new ServerSource(fakeClient({ mutate }), { branch: "main" });
+  it("invokes a catalog mutation by ref with resolved params + write branch", async () => {
+    const invokeMutation = vi.fn(async () => changeOutput("review"));
+    const source = new ServerSource(fakeClient({ invokeMutation }), {
+      branch: "main",
+    });
     const context: MutationContext = {
       readTarget: { snapshot: "snap" },
       writeTarget: { branch: "review" },
@@ -86,39 +82,87 @@ describe("ServerSource", () => {
     await source.mutate(
       {
         params: {
-          kind: "set_field",
-          target_type: "PolicyClause",
-          target_id: "c1",
-          field: "status",
-          value: "approved",
+          spec: {
+            ref: "approve_policy_clause",
+            params: { clause: { $row: "id" } },
+          },
+          row: { id: "pdr-c1" },
+          rowKey: "pdr-c1",
         },
+        resolvedParams: { clause: "pdr-c1" },
       },
       context,
     );
-    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ branch: "review" });
+    // No client-side .gq is ever constructed; identity is just a typed param.
+    expect(invokeMutation.mock.calls[0]?.[0]).toBe("approve_policy_clause");
+    expect(invokeMutation.mock.calls[0]?.[1]).toMatchObject({
+      params: { clause: "pdr-c1" },
+      branch: "review",
+    });
   });
 
   it("falls back to ServerSource default branch when runtime has no write branch", async () => {
-    const mutate = vi.fn(async () => ({
+    const invokeMutation = vi.fn(async () => changeOutput("main"));
+    const source = new ServerSource(fakeClient({ invokeMutation }), {
       branch: "main",
-      query_name: "ng_mutate",
-      affected_nodes: 1,
-      affected_edges: 0,
-    }));
-    const source = new ServerSource(fakeClient({ mutate }), { branch: "main" });
+    });
     await source.mutate(
       {
         params: {
-          kind: "set_field",
-          target_type: "PolicyClause",
-          target_id: "c1",
-          field: "status",
-          value: "approved",
+          spec: { ref: "approve_policy_clause" },
+          row: {},
+          rowKey: "pdr-c1",
         },
+        resolvedParams: {},
       },
       { readTarget: { snapshot: "snap" }, writeTarget: {}, state: {} },
     );
-    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ branch: "main" });
+    expect(invokeMutation.mock.calls[0]?.[1]).toMatchObject({ branch: "main" });
+  });
+
+  it("works for a non-slug key — the client builds no predicate", async () => {
+    // A graph keyed on `email`: the mutation query owns `where email = $person`;
+    // the client only forwards the resolved param. No `where slug =` anywhere.
+    const invokeMutation = vi.fn(async () => changeOutput("main"));
+    const source = new ServerSource(fakeClient({ invokeMutation }));
+    await source.mutate(
+      {
+        params: {
+          spec: { ref: "deactivate_user", params: { person: { $row: "id" } } },
+          row: { id: "ada@example.com" },
+          rowKey: "ada@example.com",
+        },
+        resolvedParams: { person: "ada@example.com" },
+      },
+      { readTarget: {}, writeTarget: {}, state: {} },
+    );
+    expect(invokeMutation.mock.calls[0]?.[1]).toMatchObject({
+      params: { person: "ada@example.com" },
+    });
+  });
+
+  it("sends an inline rawGq mutation ad-hoc via client.mutate", async () => {
+    const mutate = vi.fn(async () => changeOutput("main"));
+    const source = new ServerSource(fakeClient({ mutate }));
+    await source.mutate(
+      {
+        params: {
+          spec: {
+            rawGq:
+              'query qf($id: String){ update Issue set { status: "closed" } where slug = $id }',
+            params: { id: { $row: "id" } },
+          },
+          row: { id: "cold-start-latency" },
+          rowKey: "cold-start-latency",
+        },
+        resolvedParams: { id: "cold-start-latency" },
+      },
+      { readTarget: {}, writeTarget: {}, state: {} },
+    );
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+      query: expect.stringContaining("update Issue"),
+      params: { id: "cold-start-latency" },
+    });
   });
 });
 
@@ -127,25 +171,19 @@ function fakeClient(overrides: {
     name: string,
     input: { params?: Record<string, unknown>; branch?: string; snapshot?: string },
   ) => Promise<ReturnType<typeof readOutput>>;
+  invokeMutation?: (
+    name: string,
+    input: { params?: Record<string, unknown>; branch?: string },
+  ) => Promise<ReturnType<typeof changeOutput>>;
   query?: (input: QueryInput) => Promise<ReturnType<typeof readOutput>>;
-  mutate?: (input: MutateInput) => Promise<{
-    branch: string;
-    query_name: string;
-    affected_nodes: number;
-    affected_edges: number;
-  }>;
+  mutate?: (input: MutateInput) => Promise<ReturnType<typeof changeOutput>>;
 }): Client {
   return {
     invoke: overrides.invoke ?? (async () => readOutput([])),
+    invokeMutation:
+      overrides.invokeMutation ?? (async () => changeOutput("main")),
     query: overrides.query ?? (async () => readOutput([])),
-    mutate:
-      overrides.mutate ??
-      (async () => ({
-        branch: "main",
-        query_name: "q",
-        affected_nodes: 0,
-        affected_edges: 0,
-      })),
+    mutate: overrides.mutate ?? (async () => changeOutput("main")),
   } as unknown as Client;
 }
 
@@ -156,5 +194,14 @@ function readOutput(rows: Record<string, unknown>[]) {
     row_count: rows.length,
     columns: [],
     rows,
+  };
+}
+
+function changeOutput(branch: string) {
+  return {
+    branch,
+    query_name: "m",
+    affected_nodes: 1,
+    affected_edges: 0,
   };
 }

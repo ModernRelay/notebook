@@ -17,7 +17,6 @@ import type {
 } from "@modernrelay/notebook-core";
 import type { MutationResult } from "@modernrelay/notebook-core";
 import { Client, type ChangeOutput } from "./http.js";
-import { translateMutation } from "./translate.js";
 
 export interface ServerSourceOptions {
   /** Default branch for reads + writes. CLI flag and notebook field win over this. */
@@ -40,10 +39,9 @@ export class ServerSource implements Source {
   capabilities(): SourceCapabilities {
     return {
       namedQueries: true,
-      // Capability-gated, off by default (canon §4.2): only advertised when the
-      // dev/CLI escape hatch is explicitly enabled.
+      // Capability-gated, off by default (canon §4.2): gates the raw `.gq`
+      // escape hatch for BOTH reads (query.rawGq) and writes (mutation.rawGq).
       rawGq: this.opts.allowRawGq ?? false,
-      mutationKinds: ["set_field"],
       branchReads: true,
       snapshotReads: true,
       branchWrites: true,
@@ -90,19 +88,42 @@ export class ServerSource implements Source {
     command: MutationCommand,
     context: MutationContext,
   ): Promise<MutationResult> {
-    const translated = translateMutation(command.params, "ng_mutate");
+    const { spec } = command.params;
     const branch = context.writeTarget.branch ?? this.opts.branch;
-    const result: ChangeOutput = await this.client.mutate(
-      {
-        query: translated.query_source,
-        name: translated.query_name,
-        params: translated.params,
-        ...(branch !== undefined && { branch }),
-      },
-      context.signal,
+    const params = command.resolvedParams;
+
+    // Canonical path: a server-owned catalog mutation invoked by name. The
+    // mutation query owns its `where` clause, so identity is never built here.
+    if (spec.ref !== undefined) {
+      await this.client.invokeMutation(
+        spec.ref,
+        {
+          ...(Object.keys(params).length > 0 && { params }),
+          ...(branch !== undefined && { branch }),
+        },
+        context.signal,
+      );
+      return { kind: "ok" };
+    }
+
+    // Escape hatch: author-written inline `.gq` sent ad-hoc via /mutate.
+    if (spec.rawGq !== undefined) {
+      const result: ChangeOutput = await this.client.mutate(
+        {
+          query: spec.rawGq,
+          ...(spec.name !== undefined && { name: spec.name }),
+          ...(Object.keys(params).length > 0 && { params }),
+          ...(branch !== undefined && { branch }),
+        },
+        context.signal,
+      );
+      void result;
+      return { kind: "ok" };
+    }
+
+    throw new Error(
+      "ServerSource.mutate: mutation has neither a catalog `ref` nor raw `rawGq`",
     );
-    void result;
-    return { kind: "ok" };
   }
 
   private targetTriple(input: ReadRequest): {

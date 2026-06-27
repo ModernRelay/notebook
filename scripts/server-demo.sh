@@ -55,6 +55,11 @@ log "Using $("$OG_BIN" --version 2>/dev/null || echo omnigraph)"
 
 if [ -f "${CLUSTER_DIR}/__cluster/state.json" ]; then
   log "Reusing existing cluster at ${CLUSTER_DIR} (delete .server-demo to reset)"
+  # Re-sync queries and re-apply so added/edited stored queries (incl. the
+  # approve/reject/raise mutations) register without a full reset. `cluster
+  # apply` is idempotent — it republishes the schema + query catalog.
+  cp -R "$QUERIES_SRC"/. "${CLUSTER_DIR}/queries/"
+  "$OG_BIN" cluster apply --config "$CLUSTER_DIR"
 else
   log "Materializing fresh cluster at ${CLUSTER_DIR}"
   mkdir -p "$CLUSTER_DIR"

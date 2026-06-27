@@ -13,10 +13,4 @@ export {
   type QueryCatalogEntry,
 } from "./http.js";
 
-export {
-  translateMutation,
-  UnsupportedTranslationError,
-  type TranslatedQuery,
-} from "./translate.js";
-
 export { ServerSource, type ServerSourceOptions } from "./source.js";

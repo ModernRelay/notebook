@@ -18,7 +18,6 @@ import {
 const FULL_CAPS: SourceCapabilities = {
   namedQueries: true,
   rawGq: true,
-  mutationKinds: ["set_field"],
   branchReads: true,
   snapshotReads: true,
   branchWrites: true,
@@ -513,11 +512,13 @@ describe("createNotebookRuntime", () => {
     await waitFor(runtime, (s) => s.status === "ready");
     await runtime.dispatch("mutate", {
       params: {
-        kind: "set_field",
-        target_type: "PolicyClause",
-        target_id: "c1",
-        field: "status",
-        value: "approved",
+        spec: {
+          ref: "approve_clause",
+          params: { clause: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "c1", status: "draft", title: "Clause" },
+        rowKey: "c1",
         __cell_id: "review",
       },
     });
@@ -549,11 +550,13 @@ describe("createNotebookRuntime", () => {
     await waitFor(runtime, (s) => s.status === "ready");
     await runtime.dispatch("mutate", {
       params: {
-        kind: "set_field",
-        target_type: "PolicyClause",
-        target_id: "c1",
-        field: "status",
-        value: "approved",
+        spec: {
+          ref: "approve_clause",
+          params: { clause: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "c1", status: "draft", title: "Clause" },
+        rowKey: "c1",
         __cell_id: "review",
       },
     });
@@ -585,11 +588,13 @@ describe("createNotebookRuntime", () => {
     await waitFor(runtime, (s) => s.status === "ready");
     await runtime.dispatch("mutate", {
       params: {
-        kind: "set_field",
-        target_type: "PolicyClause",
-        target_id: "c1",
-        field: "status",
-        value: "approved",
+        spec: {
+          ref: "approve_clause",
+          params: { clause: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "c1", status: "draft", title: "Clause" },
+        rowKey: "c1",
         __cell_id: "review",
       },
     });
@@ -620,11 +625,13 @@ describe("createNotebookRuntime", () => {
     await waitFor(runtime, (s) => s.status === "ready");
     const mutation = runtime.dispatch("mutate", {
       params: {
-        kind: "set_field",
-        target_type: "PolicyClause",
-        target_id: "c1",
-        field: "status",
-        value: "approved",
+        spec: {
+          ref: "approve_clause",
+          params: { clause: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "c1", status: "draft", title: "Clause" },
+        rowKey: "c1",
         __cell_id: "review",
       },
     });
@@ -660,11 +667,13 @@ describe("createNotebookRuntime", () => {
     await waitFor(runtime, (s) => s.status === "ready");
     await runtime.dispatch("mutate", {
       params: {
-        kind: "set_field",
-        target_type: "PolicyClause",
-        target_id: "c1",
-        field: "status",
-        value: "approved",
+        spec: {
+          ref: "approve_clause",
+          params: { clause: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "c1", status: "draft", title: "Clause" },
+        rowKey: "c1",
         __cell_id: "review",
       },
     });
@@ -703,10 +712,9 @@ function actionListNotebook(target: {
             {
               label: "Approve",
               mutation: {
-                kind: "set_field",
-                target_type: "PolicyClause",
-                field: "status",
-                value: "approved",
+                ref: "approve_clause",
+                params: { clause: { $row: "id" } },
+                optimistic: { set: { status: "approved" } },
               },
             },
           ],
