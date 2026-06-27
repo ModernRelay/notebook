@@ -82,6 +82,49 @@ describe("assembleLensSpec", () => {
     );
   });
 
+  it("accepts the copy flag on a Table column and a Card field", () => {
+    expect(() =>
+      assembleLensSpec(
+        "c",
+        "Table",
+        { columns: [{ key: "from", label: "From", copy: true }] },
+        fakeResult,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assembleLensSpec(
+        "c",
+        "Card",
+        { fields: [{ key: "from", label: "From", copy: true }] },
+        fakeResult,
+      ),
+    ).not.toThrow();
+  });
+
+  it("accepts badge/align on a Table column and badge on a Card field", () => {
+    expect(() =>
+      assembleLensSpec(
+        "c",
+        "Table",
+        {
+          columns: [
+            { key: "conf", label: "Conf", badge: true },
+            { key: "n", label: "N", align: "right" },
+          ],
+        },
+        fakeResult,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assembleLensSpec(
+        "c",
+        "Card",
+        { fields: [{ key: "conf", label: "Conf", badge: true }] },
+        fakeResult,
+      ),
+    ).not.toThrow();
+  });
+
   it("rejects malformed author props", () => {
     expect(() =>
       assembleLensSpec("bad", "Table", { columns: [] }, fakeResult),

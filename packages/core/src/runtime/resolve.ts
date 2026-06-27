@@ -29,6 +29,48 @@ export function pointersOverlap(a: string, b: string): boolean {
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
+/** A query parameter bound to state: its JSON pointer + optional literal default. */
+export interface StateParam {
+  pointer: string;
+  default?: unknown;
+}
+
+/**
+ * Every distinct `$state` query parameter a notebook reads, in first-seen order,
+ * each with its first-seen `default`. These are the live "parameters" driving the
+ * canvas — the values dependent cells re-resolve against. Host shells can surface
+ * them (e.g. as copyable selection chips) so they're visible before any click.
+ */
+export function notebookStateParams(notebook: Notebook): StateParam[] {
+  const seen = new Map<string, StateParam>();
+  for (const cell of notebook.cells) {
+    if (isControl(cell) || !cell.query?.params) continue;
+    collectStateParams(cell.query.params, seen);
+  }
+  return [...seen.values()];
+}
+
+function collectStateParams(value: unknown, out: Map<string, StateParam>): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectStateParams(item, out);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.$state === "string" && !out.has(record.$state)) {
+    out.set(record.$state, { pointer: record.$state, default: record.default });
+  }
+  for (const item of Object.values(record)) collectStateParams(item, out);
+}
+
+/** Read the value at a JSON pointer in a state object (undefined if absent). */
+export function readStatePointer(
+  state: Record<string, unknown>,
+  pointer: string,
+): unknown {
+  return resolveStatePointer(state, pointer);
+}
+
 export function resolveParams(
   params: Record<string, unknown>,
   state: Record<string, unknown>,

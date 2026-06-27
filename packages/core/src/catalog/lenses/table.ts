@@ -9,6 +9,12 @@ export const TableAuthorPropsSchema = z.object({
         format: z.enum(["text", "number", "json"]).optional(),
         /** Wrap long prose instead of clipping it to one line. */
         wrap: z.boolean().optional(),
+        /** Render a copy-to-clipboard button next to the value (web only). */
+        copy: z.boolean().optional(),
+        /** Render the value as a subtle badge/chip — for enums (web only). */
+        badge: z.boolean().optional(),
+        /** Cell text alignment; numeric columns default to "right" (web only). */
+        align: z.enum(["left", "right"]).optional(),
       }),
     )
     .min(1),

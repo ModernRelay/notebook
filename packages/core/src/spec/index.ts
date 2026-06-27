@@ -161,6 +161,32 @@ export const CellSchema = z
      * Cells flow left-to-right and wrap. The TUI ignores this (one cell per tab).
      */
     width: z.enum(["full", "half", "third", "two-thirds"]).optional(),
+    /**
+     * Tab this cell belongs to (host-shell view tier). Cells are one flat list
+     * sharing one runtime + state; `tab` partitions them into named pages in the
+     * shell. The tab bar lists the distinct `tab` values in declaration order;
+     * cells with no `tab` fall into a leading default tab. With no `tab` anywhere
+     * the notebook renders as a single canvas (today's behavior). State is shared
+     * across tabs, so a selection on one tab drives dependent cells on another.
+     */
+    tab: z.string().min(1).optional(),
+    /**
+     * Per-card background tint (host-shell appearance tier). A fixed palette of
+     * neutral grayscale + a few accents; absent = the default card surface. The
+     * web host applies it as a `--card` override on the cell; a browser-local
+     * Edit-mode picker can override it per-browser. The TUI ignores it.
+     */
+    color: z
+      .enum(["slate", "zinc", "stone", "blue", "emerald", "amber", "rose", "violet"])
+      .optional(),
+    /**
+     * Initial card height (host-shell appearance tier). The web canvas is a
+     * react-grid-layout grid with explicit heights; this sets the starting row
+     * span — `short`/`medium`/`tall` — else a per-lens default applies. Content
+     * taller than the box scrolls inside the card; a drag-resize override
+     * persists per-browser. The TUI ignores it.
+     */
+    height: z.enum(["short", "medium", "tall"]).optional(),
   })
   .strict()
   .refine(

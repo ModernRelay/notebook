@@ -10,6 +10,24 @@ export interface AppConfig {
   label: string;
 }
 
+/**
+ * Config the `view` CLI injects into index.html so the bare URL (no query
+ * string) loads the served notebook over the same-origin `/og` proxy. URL
+ * params still override each field (dev server / sharing a specific branch).
+ */
+interface InjectedConfig {
+  notebook?: string;
+  server?: string;
+  graph?: string;
+  branch?: string;
+  allowRawGq?: boolean;
+}
+declare global {
+  interface Window {
+    __DASHBOOK__?: InjectedConfig;
+  }
+}
+
 function readToken(server: string): string | undefined {
   // In BFF/proxy mode the browser must hold no default graph token; the Node
   // proxy owns auth injection and strips any browser-supplied Authorization.
@@ -30,7 +48,10 @@ function readToken(server: string): string | undefined {
 
 export async function buildConfig(): Promise<AppConfig> {
   const url = new URL(window.location.href);
-  const notebookParam = url.searchParams.get("notebook");
+  // Precedence per field: explicit URL param → CLI-injected config → notebook.
+  const injected = window.__DASHBOOK__ ?? {};
+  const notebookParam =
+    url.searchParams.get("notebook") ?? injected.notebook ?? null;
   const notebookUrl =
     notebookParam !== null ? new URL(notebookParam, window.location.href) : null;
 
@@ -40,7 +61,8 @@ export async function buildConfig(): Promise<AppConfig> {
       : defaultServerNotebookYaml;
   const notebook = parseNotebook(notebookYaml);
 
-  const serverParam = url.searchParams.get("server") ?? notebook.server;
+  const serverParam =
+    url.searchParams.get("server") ?? injected.server ?? notebook.server;
   // A relative server (e.g. `?server=/og`, the dev-proxy same-origin path)
   // must be resolved to an absolute URL: the omnigraph SDK builds requests
   // with `new URL(baseUrl + path)`, which throws on a relative base.
@@ -53,12 +75,15 @@ export async function buildConfig(): Promise<AppConfig> {
       "Server mode requires top-level `server:` or a `?server=` URL parameter.",
     );
   }
-  const branch = url.searchParams.get("branch") ?? undefined;
+  const branch =
+    url.searchParams.get("branch") ?? injected.branch ?? undefined;
   // rawGq is off by default (operator/production context); enable only via the
   // explicit `?allowRawGq` escape hatch (e.g. `view --allow-raw-gq` forwards it).
-  const allowRawGq = isTruthyParam(url.searchParams.get("allowRawGq"));
+  const allowRawGq =
+    isTruthyParam(url.searchParams.get("allowRawGq")) ||
+    injected.allowRawGq === true;
   // omnigraph-server 0.7.0+ is cluster-only; reads/writes are graph-scoped.
-  const graph = url.searchParams.get("graph") ?? notebook.graph;
+  const graph = url.searchParams.get("graph") ?? injected.graph ?? notebook.graph;
   if (!graph) {
     throw new Error(
       "Server mode requires a graph id: top-level `graph:` or a `?graph=` URL parameter.",

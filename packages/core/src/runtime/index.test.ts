@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import type { Notebook } from "../spec/index.js";
 import {
   createNotebookRuntime,
+  notebookStateParams,
+  readStatePointer,
   type ExecutionContext,
   type MutationCommand,
   type MutationContext,
@@ -88,6 +90,67 @@ const NOTEBOOK: Notebook = {
     },
   ],
 };
+
+describe("notebookStateParams", () => {
+  it("collects distinct $state params (first-seen order) with their defaults", () => {
+    const notebook: Notebook = {
+      version: 1,
+      title: "T",
+      cells: [
+        {
+          id: "a",
+          lens: "Table",
+          query: {
+            ref: "q",
+            params: { slug: { $state: "/selected", default: "abm" } },
+          },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+        {
+          id: "b",
+          lens: "Table",
+          query: {
+            ref: "q2",
+            params: {
+              domain: { $state: "/domain", default: "cog" },
+              slug: { $state: "/selected" }, // dup pointer → first default kept
+            },
+          },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
+    expect(notebookStateParams(notebook)).toEqual([
+      { pointer: "/selected", default: "abm" },
+      { pointer: "/domain", default: "cog" },
+    ]);
+  });
+
+  it("returns [] when no cell binds a $state param", () => {
+    const notebook: Notebook = {
+      version: 1,
+      title: "T",
+      cells: [
+        {
+          id: "a",
+          lens: "Table",
+          query: { ref: "q" },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
+    expect(notebookStateParams(notebook)).toEqual([]);
+  });
+});
+
+describe("readStatePointer", () => {
+  it("reads a value at a pointer, undefined when absent", () => {
+    const state = { selected: "abm", filters: { status: "open" } };
+    expect(readStatePointer(state, "/selected")).toBe("abm");
+    expect(readStatePointer(state, "/filters/status")).toBe("open");
+    expect(readStatePointer(state, "/missing")).toBeUndefined();
+  });
+});
 
 describe("validateNotebookCompatibility", () => {
   const RAWGQ_NB: Notebook = {

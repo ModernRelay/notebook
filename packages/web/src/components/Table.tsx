@@ -9,10 +9,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/utils";
 
 interface ComponentCtx<P> {
   props: P;
+}
+
+/** A column reads as numeric when every non-empty value parses as a number. */
+function isNumericColumn(
+  key: string,
+  rows: ReadonlyArray<Record<string, unknown>>,
+): boolean {
+  let sawValue = false;
+  for (const row of rows) {
+    const v = row[key];
+    if (v === null || v === undefined || v === "") continue;
+    sawValue = true;
+    if (typeof v === "number") continue;
+    if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v)))
+      continue;
+    return false;
+  }
+  return sawValue;
 }
 
 function formatCell(
@@ -44,12 +64,24 @@ export function Table({
   const rowValue = (row: Record<string, unknown>): string =>
     select_column ? String(row[select_column] ?? "") : "";
 
+  // Numeric columns right-align (with tabular figures); authors can override.
+  const alignByKey: Record<string, "left" | "right"> = {};
+  for (const col of columns) {
+    alignByKey[col.key] =
+      col.align ?? (isNumericColumn(col.key, rows) ? "right" : "left");
+  }
+
   return (
     <CossTable>
       <TableHeader>
         <TableRow>
           {columns.map((col) => (
-            <TableHead key={col.key}>{col.label}</TableHead>
+            <TableHead
+              key={col.key}
+              className={cn(alignByKey[col.key] === "right" && "text-right")}
+            >
+              {col.label}
+            </TableHead>
           ))}
         </TableRow>
       </TableHeader>
@@ -73,29 +105,43 @@ export function Table({
                   }
                 : {})}
             >
-              {columns.map((col) => (
-                <TableCell
-                  key={col.key}
-                  // Wrap by default (overriding the ui-kit's nowrap) so the
-                  // w-full table always shrinks to its container — vital inside
-                  // the narrow side drawer, where a long value would otherwise
-                  // force horizontal overflow. Auto table-layout still hands the
-                  // longer column more width. `wrap` columns additionally cap
-                  // their line length (max-w-prose) for readable prose.
-                  className={cn(
-                    "align-top whitespace-normal break-words font-mono text-xs",
-                    dense && "py-1",
-                  )}
-                >
-                  {col.wrap ? (
-                    <div className="max-w-prose leading-snug">
-                      {formatCell(row[col.key], col.format)}
-                    </div>
-                  ) : (
-                    formatCell(row[col.key], col.format)
-                  )}
-                </TableCell>
-              ))}
+              {columns.map((col) => {
+                const value = formatCell(row[col.key], col.format);
+                const content = col.wrap ? (
+                  <div className="max-w-prose leading-snug">{value}</div>
+                ) : (
+                  value
+                );
+                const alignRight = alignByKey[col.key] === "right";
+                return (
+                  <TableCell
+                    key={col.key}
+                    // Wrap by default (overriding the ui-kit's nowrap) so the
+                    // w-full table always shrinks to its container. `wrap`
+                    // columns cap line length (max-w-prose); `copy` columns get a
+                    // copy-to-clipboard button revealed on cell hover; `badge`
+                    // columns render the value as a chip (enums). Tables stay mono.
+                    className={cn(
+                      "group align-top whitespace-normal break-words font-mono text-xs",
+                      alignRight && "text-right tabular-nums",
+                      dense && "py-1",
+                    )}
+                  >
+                    {col.badge ? (
+                      value ? (
+                        <Badge variant="secondary">{value}</Badge>
+                      ) : null
+                    ) : col.copy ? (
+                      <span className="inline-flex items-start gap-1">
+                        {content}
+                        <CopyButton value={value} className="mt-0.5" />
+                      </span>
+                    ) : (
+                      content
+                    )}
+                  </TableCell>
+                );
+              })}
             </TableRow>
           );
         })}

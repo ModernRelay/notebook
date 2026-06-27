@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
@@ -50,6 +50,18 @@ export async function serve(opts: ServeOptions): Promise<void> {
   const webDist = resolveWebDist();
   const upstream = new URL(opts.connection.server);
 
+  // Config injected into index.html as `window.__DASHBOOK__`, so the bare URL
+  // (http://host:port/) loads the served notebook over the same-origin `/og`
+  // proxy — no `?notebook=…&server=…&graph=…` query string needed. URL params
+  // still override it (dev / sharing a specific branch).
+  const viewConfig: Record<string, unknown> = {
+    notebook: "/notebook.yaml",
+    server: "/og",
+    graph: opts.connection.graphId,
+  };
+  if (opts.connection.branch) viewConfig.branch = opts.connection.branch;
+  if (opts.allowRawGq === true) viewConfig.allowRawGq = true;
+
   const server = http.createServer((req, res) => {
     const rawPath = (req.url ?? "/").split("?")[0] ?? "/";
     // Decode once, here. A malformed %-sequence (e.g. `/%ZZ`) must answer 400,
@@ -63,15 +75,6 @@ export async function serve(opts: ServeOptions): Promise<void> {
       return;
     }
 
-    // 0. Bare host (no query string) → redirect to the parametrized URL so the
-    // *served* notebook loads over the /og proxy, not the bundled default
-    // (which would talk to the upstream cross-origin and CORS-fail).
-    if (path === "/" && !(req.url ?? "").includes("?")) {
-      const params = notebookParams(opts.connection, opts.allowRawGq === true);
-      res.writeHead(302, { location: `/?${params.toString()}` });
-      res.end();
-      return;
-    }
     // 1. /og/* → BFF reverse proxy (token injected server-side).
     if (path === "/og" || path.startsWith("/og/")) {
       proxyOg(req, res, upstream, opts.connection.token);
@@ -82,14 +85,19 @@ export async function serve(opts: ServeOptions): Promise<void> {
       sendFile(res, opts.notebookPath, ".yaml");
       return;
     }
-    // 3. real static files under web-dist
+    // 3. real static files under web-dist (never index.html — that's injected)
     const staticPath = safeJoin(webDist, path);
-    if (staticPath && !path.endsWith("/") && existsSync(staticPath)) {
+    if (
+      staticPath &&
+      !path.endsWith("/") &&
+      path !== "/index.html" &&
+      existsSync(staticPath)
+    ) {
       sendFile(res, staticPath, extname(staticPath));
       return;
     }
-    // 4. SPA fallback
-    sendFile(res, join(webDist, "index.html"), ".html");
+    // 4. SPA fallback — index.html with the view config injected.
+    sendIndex(res, join(webDist, "index.html"), viewConfig);
   });
 
   await new Promise<void>((resolvePromise, reject) => {
@@ -109,7 +117,7 @@ export async function serve(opts: ServeOptions): Promise<void> {
     });
   });
   const port = (server.address() as AddressInfo).port;
-  const url = buildOpenUrl(port, opts.connection, opts.allowRawGq === true);
+  const url = buildOpenUrl(port);
 
   process.stdout.write(`\n@modernrelay/notebook → http://127.0.0.1:${port}\n`);
   process.stdout.write(`  ${opts.connection.label}\n`);
@@ -118,28 +126,34 @@ export async function serve(opts: ServeOptions): Promise<void> {
 }
 
 /**
- * Query that points the SPA at the served notebook over the same-origin proxy.
- * Without these params the app loads its bundled default notebook and talks to
- * the upstream cross-origin (CORS-blocked), so both the printed URL and the
- * bare-host redirect carry them.
+ * Serve index.html with `window.__DASHBOOK__` injected, so the SPA loads the
+ * served notebook over the same-origin `/og` proxy without any query string.
  */
-function notebookParams(conn: Connection, allowRawGq: boolean): URLSearchParams {
-  const params = new URLSearchParams();
-  params.set("notebook", "/notebook.yaml");
-  params.set("server", "/og"); // same-origin via the proxy above
-  params.set("graph", conn.graphId);
-  if (conn.branch) params.set("branch", conn.branch);
-  // The browser gates rawGq itself (server-side flag → URL → web config).
-  if (allowRawGq) params.set("allowRawGq", "1");
-  return params;
+function sendIndex(
+  res: http.ServerResponse,
+  indexPath: string,
+  config: Record<string, unknown>,
+): void {
+  let html: string;
+  try {
+    html = readFileSync(indexPath, "utf8");
+  } catch {
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    res.end("404 Not Found");
+    return;
+  }
+  // Escape `<` so a value can't break out of the <script>; inject before </head>.
+  const json = JSON.stringify(config).replace(/</g, "\\u003c");
+  const tag = `<script>window.__DASHBOOK__=${json}</script>`;
+  const out = html.includes("</head>")
+    ? html.replace("</head>", `${tag}</head>`)
+    : `${tag}${html}`;
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(out);
 }
 
-function buildOpenUrl(
-  port: number,
-  conn: Connection,
-  allowRawGq: boolean,
-): string {
-  return `http://127.0.0.1:${port}/?${notebookParams(conn, allowRawGq).toString()}`;
+function buildOpenUrl(port: number): string {
+  return `http://127.0.0.1:${port}/`;
 }
 
 function sendFile(res: http.ServerResponse, file: string, ext: string): void {
