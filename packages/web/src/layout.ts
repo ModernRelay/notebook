@@ -64,26 +64,42 @@ export function lensDefaultRows(lens: Cell["lens"]): number {
   }
 }
 
+/** Clamp a saved box into the 12-column grid (guards stale/corrupt localStorage
+ *  boxes from being handed to — and re-saved by — RGL out of bounds). */
+function clampBox(b: CardBox): CardBox {
+  const w = Math.min(Math.max(Math.round(b.w), 1), GRID_COLS);
+  const x = Math.min(Math.max(Math.round(b.x), 0), GRID_COLS - w);
+  return { x, y: Math.max(Math.round(b.y), 0), w, h: Math.max(Math.round(b.h), 1) };
+}
+
 /**
  * Build the react-grid-layout array for a tab's visible cells: a saved box if the
- * user has arranged the cell, else a generated default — flowing cells
- * left-to-right in declaration order (`w` from `width`, `h` from `height`/lens
- * default) and wrapping rows. Saved and generated boxes may overlap; RGL's
- * vertical compaction resolves it.
+ * user has arranged the cell (clamped to the grid), else a generated default —
+ * flowing cells left-to-right in declaration order (`w` from `width`, `h` from
+ * `height`/lens default) and wrapping rows. New (unsaved) cells start *below* any
+ * saved boxes so they never seed on top of an arranged card; RGL's vertical
+ * compaction then tidies the result.
  */
 export function buildTabLayout(
   cells: readonly CellExecution[],
   saved: Record<string, CardBox>,
 ): Array<{ i: string } & CardBox> {
+  // Seed generated cells below the lowest saved box in this tab (0 when none),
+  // so a freshly-added cell can't overlap one the user has positioned.
+  let floor = 0;
+  for (const ce of cells) {
+    const b = saved[ce.cell.id];
+    if (b) floor = Math.max(floor, clampBox(b).y + clampBox(b).h);
+  }
   const out: Array<{ i: string } & CardBox> = [];
   let cx = 0;
-  let cy = 0;
+  let cy = floor;
   let rowH = 0;
   for (const ce of cells) {
     const cell = ce.cell;
     const box = saved[cell.id];
     if (box) {
-      out.push({ i: cell.id, ...box });
+      out.push({ i: cell.id, ...clampBox(box) });
       continue;
     }
     const w = widthToCols(cell.width);

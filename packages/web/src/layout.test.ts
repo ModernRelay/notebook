@@ -96,4 +96,20 @@ describe("buildTabLayout", () => {
     // row 0 height = max(8,18) = 18 → c wraps to y = 18
     expect(out[2]).toEqual({ i: "c", x: 0, y: 18, w: 12, h: 8 });
   });
+
+  it("seeds new (unsaved) cells below saved boxes — never overlapping", () => {
+    const out = buildTabLayout(
+      [ce("a"), ce("b", { width: "half" })], // a saved, b is new
+      { a: { x: 0, y: 0, w: 6, h: 8 } },
+    );
+    expect(out[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 8 });
+    // b starts at the floor below the saved box (y >= 8), not at {0,0}.
+    expect(out[1]).toEqual({ i: "b", x: 0, y: 8, w: 6, h: 8 });
+  });
+
+  it("clamps an out-of-bounds saved box into the 12-col grid", () => {
+    const out = buildTabLayout([ce("a")], { a: { x: 10, y: -1, w: 6, h: 0 } });
+    // w stays 6 → x clamps to 12-6=6; y→0; h→1
+    expect(out[0]).toEqual({ i: "a", x: 6, y: 0, w: 6, h: 1 });
+  });
 });

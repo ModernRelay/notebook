@@ -37,7 +37,9 @@ export interface StateParam {
 
 /**
  * Every distinct `$state` query parameter a notebook reads, in first-seen order,
- * each with its first-seen `default`. These are the live "parameters" driving the
+ * each with its `default` — or no default when cells declare *conflicting*
+ * defaults for the same pointer (so a host chip never shows one while another
+ * cell queries with the other). These are the live "parameters" driving the
  * canvas — the values dependent cells re-resolve against. Host shells can surface
  * them (e.g. as copyable selection chips) so they're visible before any click.
  */
@@ -57,8 +59,20 @@ function collectStateParams(value: unknown, out: Map<string, StateParam>): void 
     return;
   }
   const record = value as Record<string, unknown>;
-  if (typeof record.$state === "string" && !out.has(record.$state)) {
-    out.set(record.$state, { pointer: record.$state, default: record.default });
+  if (typeof record.$state === "string") {
+    const existing = out.get(record.$state);
+    if (!existing) {
+      out.set(record.$state, { pointer: record.$state, default: record.default });
+    } else if (
+      // Two cells bind the same pointer with *different* declared defaults →
+      // there's no single default to surface, so drop it (a host chip would
+      // otherwise show one while another cell queries with the other).
+      record.default !== undefined &&
+      existing.default !== undefined &&
+      existing.default !== record.default
+    ) {
+      existing.default = undefined;
+    }
   }
   for (const item of Object.values(record)) collectStateParams(item, out);
 }

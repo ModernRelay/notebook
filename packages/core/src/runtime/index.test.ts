@@ -126,6 +126,32 @@ describe("notebookStateParams", () => {
     ]);
   });
 
+  it("drops the default when cells declare conflicting defaults for a pointer", () => {
+    const notebook: Notebook = {
+      version: 1,
+      title: "T",
+      cells: [
+        {
+          id: "a",
+          lens: "Table",
+          query: { ref: "q", params: { s: { $state: "/status", default: "open" } } },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+        {
+          id: "b",
+          lens: "Table",
+          query: { ref: "q2", params: { s: { $state: "/status", default: "closed" } } },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    };
+    // No single default to surface → undefined (a host chip shows "—", not a
+    // value one cell uses while another queries with the other).
+    expect(notebookStateParams(notebook)).toEqual([
+      { pointer: "/status", default: undefined },
+    ]);
+  });
+
   it("returns [] when no cell binds a $state param", () => {
     const notebook: Notebook = {
       version: 1,
