@@ -686,6 +686,70 @@ describe("createNotebookRuntime", () => {
     expect(props.runtime?.mutation_state?.c1).toBeUndefined();
     runtime.dispose();
   });
+
+  it("an older mutation settle never clobbers a newer dispatch on the same key", async () => {
+    const resolvers: Array<() => void> = [];
+    const source = fakeSource({
+      read: async () => ({
+        query_name: "q",
+        target: "fixture",
+        row_count: 1,
+        columns: ["id", "status", "title"],
+        rows: [{ id: "c1", status: "draft", title: "Clause" }],
+      }),
+      mutate: () =>
+        new Promise((resolve) => {
+          resolvers.push(() => resolve({ kind: "ok" }));
+        }),
+    });
+    const runtime = createNotebookRuntime({
+      notebook: actionListNotebook({}),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    const dispatchStatus = (value: string) =>
+      runtime.dispatch("mutate", {
+        params: {
+          spec: {
+            ref: `set_${value}`,
+            params: { clause: { $row: "id" } },
+            optimistic: { set: { status: value } },
+          },
+          row: { id: "c1", status: "draft", title: "Clause" },
+          rowKey: "c1",
+          __cell_id: "review",
+        },
+      });
+
+    const approve = dispatchStatus("approved"); // seq 1, in flight
+    await waitFor(runtime, (s) => s.cells[0]?.result?.rows[0]?.status === "approved");
+    const reject = dispatchStatus("rejected"); // seq 2, owns the key now
+    await waitFor(runtime, (s) => s.cells[0]?.result?.rows[0]?.status === "rejected");
+
+    // Resolve the OLDER (approve) settle first — it must NOT flip the row back
+    // to approved or clear the newer (reject) saving state.
+    resolvers[0]?.();
+    await approve;
+    const mid = runtime.getSnapshot();
+    expect(mid.cells[0]?.result?.rows[0]?.status).toBe("rejected");
+    const midProps = mid.cells[0]?.spec?.elements.review?.props as {
+      runtime?: { mutation_state?: Record<string, { saving: boolean }> };
+    };
+    expect(midProps.runtime?.mutation_state?.c1?.saving).toBe(true);
+
+    // Resolve the newer (reject) settle — converges and clears after the
+    // post-mutation re-read reconciles (async, hence waitFor).
+    resolvers[1]?.();
+    await reject;
+    await waitFor(runtime, (s) => {
+      const pr = s.cells[0]?.spec?.elements.review?.props as {
+        runtime?: { mutation_state?: Record<string, { saving: boolean }> };
+      };
+      return pr.runtime?.mutation_state?.c1 === undefined;
+    });
+    runtime.dispose();
+  });
 });
 
 function actionListNotebook(target: {

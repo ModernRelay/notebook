@@ -12,6 +12,13 @@ export interface OptimisticPatch {
   value: unknown;
   saving: boolean;
   error?: string;
+  /**
+   * Monotonic dispatch token. Two quick mutations on the same `(cellId, rowKey,
+   * field)` key share the same map entry; a settle only mutates the entry it
+   * still owns (`cur.seq === patch.seq`), so an older settle can't clobber or
+   * delete a newer in-flight patch.
+   */
+  seq: number;
 }
 
 export function actionListMutations(cell: Cell): MutationSpec[] {
@@ -38,6 +45,7 @@ export function patchesFromMutation(
   spec: MutationSpec,
   cellId: string,
   rowKey: string,
+  seq: number,
 ): OptimisticPatch[] {
   if (!spec.optimistic) return [];
   return Object.entries(spec.optimistic.set).map(([field, value]) => ({
@@ -47,6 +55,7 @@ export function patchesFromMutation(
     field,
     value,
     saving: true,
+    seq,
   }));
 }
 

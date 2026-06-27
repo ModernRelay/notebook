@@ -57,6 +57,7 @@ class NotebookRuntimeImpl implements NotebookRuntime {
   private readonly optimistic = new Map<string, OptimisticPatch>();
   private disposed = false;
   private generation = 0;
+  private mutationSeq = 0;
   private snapshot: RuntimeSnapshot;
 
   constructor(options: CreateNotebookRuntimeOptions) {
@@ -182,7 +183,10 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       this.snapshot.state,
     );
     // Optimistic overlay keys on the originating cell, so we need a cellId.
-    const patches = cellId ? patchesFromMutation(spec, cellId, rowKey) : [];
+    // Each dispatch gets a monotonic seq so a later dispatch on the same key
+    // (Approve→Reject on one row) owns the entry and stale settles no-op.
+    const seq = ++this.mutationSeq;
+    const patches = cellId ? patchesFromMutation(spec, cellId, rowKey, seq) : [];
     if (patches.length > 0) {
       for (const patch of patches) this.optimistic.set(patch.key, patch);
       this.rebuildSpecsFromRaw();
@@ -207,15 +211,23 @@ class NotebookRuntimeImpl implements NotebookRuntime {
           signal: controller.signal,
         },
       );
+      // Only finalize patches this dispatch still owns — a newer dispatch on the
+      // same key must not be clobbered by our (now-stale) settle.
       for (const patch of patches) {
-        this.optimistic.set(patch.key, { ...patch, saving: false });
+        const cur = this.optimistic.get(patch.key);
+        if (cur?.seq === patch.seq) {
+          this.optimistic.set(patch.key, { ...cur, saving: false });
+        }
       }
       if (patches.length > 0) this.rebuildSpecsFromRaw();
       this.snapshot = { ...this.snapshot, mutationError: null };
       this.notify();
       this.rerunCells(new Set(dataCellIds(this.notebook)));
     } catch (err) {
-      for (const patch of patches) this.optimistic.delete(patch.key);
+      for (const patch of patches) {
+        const cur = this.optimistic.get(patch.key);
+        if (cur?.seq === patch.seq) this.optimistic.delete(patch.key);
+      }
       const message = errorMessage(err);
       this.snapshot = { ...this.snapshot, mutationError: message };
       this.rebuildSpecsFromRaw();

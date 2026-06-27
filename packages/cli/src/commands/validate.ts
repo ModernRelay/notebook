@@ -139,14 +139,15 @@ function validateCatalogRefs(
           message: `catalog query '${ref}' does not exist or is not exposed`,
           code: "unknown_ref",
         });
+      } else if (entry.mutation) {
+        // Wrong kind — stop; don't validate params against a mutation's
+        // descriptors (the read cell's params don't apply to it).
+        errors.push({
+          path: `${basePath}/ref`,
+          message: `catalog ref '${ref}' is a stored mutation; data cells require read queries`,
+          code: "wrong_query_kind",
+        });
       } else {
-        if (entry.mutation) {
-          errors.push({
-            path: `${basePath}/ref`,
-            message: `catalog ref '${ref}' is a stored mutation; data cells require read queries`,
-            code: "wrong_query_kind",
-          });
-        }
         const p = validateParamMap(
           cell.query?.params ?? {},
           entry.params,
@@ -185,11 +186,14 @@ function validateCatalogRefs(
         return;
       }
       if (!entry.mutation) {
+        // Wrong kind — stop; don't validate the mutation's params against a
+        // read query's descriptors (would emit spurious unknown/missing errors).
         errors.push({
           path: `${mBase}/ref`,
           message: `catalog ref '${m.ref}' is a read query; actions require a stored mutation`,
           code: "wrong_query_kind",
         });
+        return;
       }
       const mp = validateParamMap(
         (m.params ?? {}) as Record<string, unknown>,

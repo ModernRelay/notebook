@@ -106,30 +106,12 @@ export function resolveParams(
   return out;
 }
 
-function resolveExpr(value: unknown, state: Record<string, unknown>): unknown {
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "$state" in value
-  ) {
-    const obj = value as { $state: unknown; default?: unknown };
-    if (typeof obj.$state !== "string") return undefined;
-    const resolved = resolveStatePointer(state, obj.$state);
-    if (resolved === undefined || resolved === null || resolved === "") {
-      return obj.default;
-    }
-    return resolved;
-  }
-  return value;
-}
-
 /**
  * Resolve a mutation's `params` map for dispatch. Each value is a literal, a
- * clicked-row column ref `{ $row: "<col>" }`, or a state ref `{ $state }`.
- * `$row` resolves from the clicked row (which the lens supplies); `$state`
- * reuses the read-side `resolveExpr`. The result is the final typed param map
- * forwarded to the source — the source never sees `$row`/`$state`.
+ * clicked-row column ref `{ $row: "<col>" }`, or a state ref `{ $state }`,
+ * possibly nested inside arrays/objects. `$row` resolves from the clicked row
+ * (which the lens supplies); `$state` from notebook state. The source never
+ * sees a `$row`/`$state` marker.
  */
 export function resolveMutationParams(
   params: Record<string, unknown> | undefined,
@@ -139,26 +121,48 @@ export function resolveMutationParams(
   const out: Record<string, unknown> = {};
   if (!params) return out;
   for (const [key, value] of Object.entries(params)) {
-    out[key] = resolveMutationExpr(value, row, state);
+    out[key] = resolveExpr(value, state, row);
   }
   return out;
 }
 
-function resolveMutationExpr(
+/**
+ * Recursively resolve `{ $state: "/ptr", default? }` and — when a `row` is
+ * given (the mutation path) — `{ $row: "<col>" }` markers wherever they appear
+ * in a value: arrays and nested objects included. Marker objects are leaves;
+ * plain objects/arrays are walked. This mirrors the validator's recursive
+ * marker detection (`containsStateExpr` in cli/validate), so a value the
+ * validator treats as dynamic is exactly the value the runtime resolves —
+ * there is no "marked dynamic but sent literal" gap.
+ */
+function resolveExpr(
   value: unknown,
-  row: Record<string, unknown>,
   state: Record<string, unknown>,
+  row?: Record<string, unknown>,
 ): unknown {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    if ("$row" in value) {
-      const col = (value as { $row: unknown }).$row;
-      return typeof col === "string" ? row[col] : undefined;
-    }
-    if ("$state" in value) {
-      return resolveExpr(value, state);
-    }
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveExpr(item, state, row));
   }
-  return value;
+  if (row !== undefined && "$row" in value) {
+    const col = (value as { $row: unknown }).$row;
+    return typeof col === "string" ? row[col] : undefined;
+  }
+  if ("$state" in value) {
+    const obj = value as { $state: unknown; default?: unknown };
+    if (typeof obj.$state !== "string") return undefined;
+    const resolved = resolveStatePointer(state, obj.$state);
+    if (resolved === undefined || resolved === null || resolved === "") {
+      return obj.default;
+    }
+    return resolved;
+  }
+  // Plain object → recurse over its values (resolve any nested markers).
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = resolveExpr(v, state, row);
+  }
+  return out;
 }
 
 function resolveStatePointer(
