@@ -47,7 +47,8 @@ interface GlobalValue {
     },
     rect: DOMRect,
   ): void;
-  isAnnotated(cellId: string, key: string): boolean;
+  /** 1-based annotation order for this entity, or null when not annotated. */
+  numberOf(cellId: string, key: string): number | null;
 }
 
 const GlobalContext = createContext<GlobalValue | null>(null);
@@ -90,11 +91,12 @@ export function AnnotationCellProvider({
   return <CellContext.Provider value={value}>{children}</CellContext.Provider>;
 }
 
-/** Leaf-lens hook: annotate-on-click + per-entity marker state for this cell. */
+/** Leaf-lens hook: annotate-on-click + per-entity marker number for this cell. */
 export function useAnnotation(): {
   active: boolean;
   annotate: (draft: AnnotationDraft, e: React.MouseEvent) => void;
-  isAnnotated: (key: string) => boolean;
+  /** 1-based marker number for this entity, or null when not annotated. */
+  numberOf: (key: string) => number | null;
 } {
   const g = useContext(GlobalContext);
   const c = useContext(CellContext);
@@ -110,11 +112,11 @@ export function useAnnotation(): {
     },
     [g, c],
   );
-  const isAnnotated = useCallback(
-    (key: string) => (g && c ? g.isAnnotated(c.cellId, key) : false),
+  const numberOf = useCallback(
+    (key: string) => (g && c ? g.numberOf(c.cellId, key) : null),
     [g, c],
   );
-  return { active, annotate, isAnnotated };
+  return { active, annotate, numberOf };
 }
 
 /** Host hook: owns the persisted session, annotate mode, and the popup target. */
@@ -152,9 +154,13 @@ export function useAnnotations(notebook: Notebook, label: string) {
     [session.items],
   );
 
-  const isAnnotated = useCallback(
-    (cellId: string, key: string) =>
-      session.items.some((a) => a.id === annotationId(cellId, key)),
+  const numberOf = useCallback(
+    (cellId: string, key: string) => {
+      const i = session.items.findIndex(
+        (a) => a.id === annotationId(cellId, key),
+      );
+      return i === -1 ? null : i + 1;
+    },
     [session.items],
   );
 
@@ -210,8 +216,8 @@ export function useAnnotations(notebook: Notebook, label: string) {
   }, [notebook, label, session]);
 
   const globalValue = useMemo<GlobalValue>(
-    () => ({ active, open, isAnnotated }),
-    [active, open, isAnnotated],
+    () => ({ active, open, numberOf }),
+    [active, open, numberOf],
   );
 
   return {

@@ -109,7 +109,7 @@ export function Table({
         {rows.map((row, idx) => {
           const isSelected = selectable && rowValue(row) === selected;
           const key = annotKey(row, idx);
-          const annotated = annot.active && annot.isAnnotated(key);
+          const n = annot.numberOf(key);
           const clickable = annot.active || selectable;
           return (
             <TableRow
@@ -118,7 +118,7 @@ export function Table({
                 clickable && "cursor-pointer hover:bg-muted/50",
                 annot.active && "cursor-crosshair",
                 isSelected && "bg-accent",
-                annotated && "bg-primary/5",
+                n !== null && "bg-primary/5",
               )}
               {...(clickable
                 ? {
@@ -155,9 +155,9 @@ export function Table({
                       dense && "py-1",
                     )}
                   >
-                    {i === 0 && annotated && (
+                    {i === 0 && n !== null && (
                       <span className="mr-1 inline-flex align-middle">
-                        <AnnotationMarker />
+                        <AnnotationMarker n={n} />
                       </span>
                     )}
                     {col.badge ? (

@@ -47,7 +47,7 @@ export function Subgraph({
         {center.type} · depth {depth}
       </p>
       {[...groups.values()].map((g) => {
-        const annotated = annot.active && annot.isAnnotated(g.centerId);
+        const n = annot.numberOf(g.centerId);
         return (
           <div key={g.centerId} className="space-y-1">
             <p
@@ -73,7 +73,7 @@ export function Subgraph({
                   }
                 : {})}
             >
-              {annotated ? <AnnotationMarker /> : <span>●</span>}
+              {n !== null ? <AnnotationMarker n={n} /> : <span>●</span>}
               {g.centerLabel || g.centerId}
             </p>
             <ul className="ml-3 space-y-0.5 text-sm">

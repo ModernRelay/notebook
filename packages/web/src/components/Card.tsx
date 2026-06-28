@@ -40,7 +40,7 @@ export function Card({
   const title = p.title_column ? fmt(row[p.title_column]) : "";
   const akey =
     title || (fields[0] ? fmt(row[fields[0].key]) : "") || "card";
-  const annotated = annot.active && annot.isAnnotated(akey);
+  const n = annot.numberOf(akey);
   // Frameless: the cell card is the only frame (no inner border/padding).
   return (
     <div
@@ -57,7 +57,7 @@ export function Card({
     >
       {title && (
         <h3 className="mb-3 flex items-center gap-1.5 text-base font-semibold text-foreground">
-          {annotated && <AnnotationMarker />}
+          {n !== null && <AnnotationMarker n={n} />}
           {title}
         </h3>
       )}

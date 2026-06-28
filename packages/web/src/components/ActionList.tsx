@@ -65,6 +65,8 @@ export function ActionList({
     <ul className="space-y-3">
       {p.rows.map((row, idx) => {
         const id = String(row[p.id_column] ?? "");
+        const akey = id || `#${idx}`;
+        const n = annot.numberOf(akey);
         const title = String(row[p.title_column] ?? "");
         const body = p.body_column ? String(row[p.body_column] ?? "") : "";
         const meta =
@@ -107,16 +109,14 @@ export function ActionList({
                 ? {
                     onClick: (e: React.MouseEvent) =>
                       annot.annotate(
-                        { key: id || `#${idx}`, headline: title, data: row },
+                        { key: akey, headline: title, data: row },
                         e,
                       ),
                   }
                 : {})}
             >
               <div className="flex items-center gap-2">
-                {annot.active && annot.isAnnotated(id || `#${idx}`) && (
-                  <AnnotationMarker />
-                )}
+                {n !== null && <AnnotationMarker n={n} />}
                 <p className="font-medium text-foreground">{title}</p>
                 {status && (
                   <Badge variant={STATUS_VARIANT[status] ?? "secondary"}>
