@@ -4,6 +4,8 @@ import type { ActionListRuntimeProps } from "@modernrelay/notebook-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAnnotation } from "../annotation-context.js";
+import { AnnotationMarker } from "./AnnotationMarker.js";
 
 interface ComponentCtx<P> {
   props: P;
@@ -51,6 +53,7 @@ export function ActionList({
   props: p,
 }: ComponentCtx<ActionListRuntimeProps>): React.ReactElement {
   const actions = useActions();
+  const annot = useAnnotation();
   const statusMap =
     useStateValue<Record<string, string>>(p.status_state ?? "/__never__") ?? {};
 
@@ -62,6 +65,8 @@ export function ActionList({
     <ul className="space-y-3">
       {p.rows.map((row, idx) => {
         const id = String(row[p.id_column] ?? "");
+        const akey = id || `#${idx}`;
+        const n = annot.numberOf(akey);
         const title = String(row[p.title_column] ?? "");
         const body = p.body_column ? String(row[p.body_column] ?? "") : "";
         const meta =
@@ -98,8 +103,20 @@ export function ActionList({
               saving ? "border-info/40 bg-info/4" : "border-border bg-card",
             )}
           >
-            <div className="min-w-0 flex-1">
+            <div
+              className={cn("min-w-0 flex-1", annot.active && "cursor-crosshair")}
+              {...(annot.active
+                ? {
+                    onClick: (e: React.MouseEvent) =>
+                      annot.annotate(
+                        { key: akey, headline: title, data: row },
+                        e,
+                      ),
+                  }
+                : {})}
+            >
               <div className="flex items-center gap-2">
+                {n !== null && <AnnotationMarker n={n} />}
                 <p className="font-medium text-foreground">{title}</p>
                 {status && (
                   <Badge variant={STATUS_VARIANT[status] ?? "secondary"}>
@@ -138,7 +155,7 @@ export function ActionList({
                         ? "outline"
                         : (BUTTON_VARIANT[act.variant ?? "default"] ?? "outline")
                     }
-                    disabled={saving}
+                    disabled={saving || annot.active}
                     aria-pressed={isCurrent}
                     onClick={() => fireAction(actions, act, row, id, p.runtime?.cell_id)}
                   >

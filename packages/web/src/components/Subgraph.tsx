@@ -1,5 +1,8 @@
 import React from "react";
 import type { SubgraphRuntimeProps } from "@modernrelay/notebook-core";
+import { cn } from "@/lib/utils";
+import { useAnnotation } from "../annotation-context.js";
+import { AnnotationMarker } from "./AnnotationMarker.js";
 
 interface ComponentCtx<P> {
   props: P;
@@ -15,6 +18,7 @@ export function Subgraph({
   props: p,
 }: ComponentCtx<SubgraphRuntimeProps>): React.ReactElement {
   const { center, depth, rows } = p;
+  const annot = useAnnotation();
   if (rows.length === 0) {
     return (
       <p className="text-sm italic text-muted-foreground">(no neighborhood)</p>
@@ -42,29 +46,55 @@ export function Subgraph({
       <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {center.type} · depth {depth}
       </p>
-      {[...groups.values()].map((g) => (
-        <div key={g.centerId} className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">
-            ● {g.centerLabel || g.centerId}
-          </p>
-          <ul className="ml-3 space-y-0.5 text-sm">
-            {g.edges.map((e, idx) => {
-              if (e.predicate === null && e.neighbor === null) return null;
-              return (
-                <li
-                  key={idx}
-                  className="flex items-center gap-2 text-foreground"
-                >
-                  <span className="font-mono text-xs text-muted-foreground">
-                    ─{e.predicate ?? "?"}─▶
-                  </span>
-                  <span className="font-medium">{e.neighbor ?? "?"}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+      {[...groups.values()].map((g) => {
+        const n = annot.numberOf(g.centerId);
+        return (
+          <div key={g.centerId} className="space-y-1">
+            <p
+              className={cn(
+                "flex items-center gap-1.5 text-sm font-semibold text-foreground",
+                annot.active && "cursor-crosshair",
+              )}
+              {...(annot.active
+                ? {
+                    onClick: (e: React.MouseEvent) =>
+                      annot.annotate(
+                        {
+                          key: g.centerId,
+                          headline: g.centerLabel || g.centerId,
+                          data: {
+                            [center.id_column]: g.centerId,
+                            [center.label_column]: g.centerLabel,
+                            type: center.type,
+                          },
+                        },
+                        e,
+                      ),
+                  }
+                : {})}
+            >
+              {n !== null ? <AnnotationMarker n={n} /> : <span>●</span>}
+              {g.centerLabel || g.centerId}
+            </p>
+            <ul className="ml-3 space-y-0.5 text-sm">
+              {g.edges.map((e, idx) => {
+                if (e.predicate === null && e.neighbor === null) return null;
+                return (
+                  <li
+                    key={idx}
+                    className="flex items-center gap-2 text-foreground"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">
+                      ─{e.predicate ?? "?"}─▶
+                    </span>
+                    <span className="font-medium">{e.neighbor ?? "?"}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
