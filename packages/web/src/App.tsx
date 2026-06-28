@@ -80,6 +80,14 @@ import {
   UI_FONTS,
   type Appearance,
 } from "./appearance.js";
+import {
+  AnnotationCellProvider,
+  AnnotationGlobalProvider,
+  useAnnotations,
+} from "./annotation-context.js";
+import { annotationId } from "./annotations-store.js";
+import { AnnotationPopup } from "./components/AnnotationPopup.js";
+import { AnnotationPanel } from "./components/AnnotationPanel.js";
 
 // react-grid-layout, width-measured + responsive (stacks to 1 column on narrow
 // viewports). The canvas engine: drag to place, resize from edges, vertical
@@ -183,6 +191,10 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     setOverrides(EMPTY_OVERRIDES);
     clearOverrides(layoutKey);
   }, [layoutKey]);
+
+  // Annotate mode: flag graph entities, attach notes, copy a payload for an
+  // agent. Web-local, persisted per-notebook; never writes to the graph.
+  const ann = useAnnotations(config.notebook, config.label);
 
   // Tabs partition the one flat cell list into named pages (host-shell view
   // tier). Derived from the *declared* cells so the bar is stable across runtime
@@ -316,6 +328,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       onStateChange={handleStateChange}
       handlers={handlers}
     >
+      <AnnotationGlobalProvider value={ann.globalValue}>
       <Shell
         header={
           <div className="sticky top-0 z-30 border-b border-border bg-background">
@@ -363,6 +376,16 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
                 className={cn(editing && "border-primary text-foreground")}
               >
                 {editing ? "Done" : "Edit layout"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => ann.setActive((a) => !a)}
+                aria-pressed={ann.active}
+                className={cn(ann.active && "border-primary text-foreground")}
+              >
+                {ann.active ? "Done annotating" : "Annotate"}
               </Button>
               <AppearanceMenu
                 appearance={appearance}
@@ -507,6 +530,25 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
         setOpen={setCmdOpen}
         sections={commandSections}
       />
+      {ann.pending && (
+        <AnnotationPopup
+          key={annotationId(ann.pending.cellId, ann.pending.draft.key)}
+          pending={ann.pending}
+          onSave={ann.save}
+          onRemove={ann.remove}
+          onClose={ann.closePopup}
+        />
+      )}
+      {(ann.active || ann.session.items.length > 0) && (
+        <AnnotationPanel
+          session={ann.session}
+          onInstruction={ann.setInstruction}
+          onRemove={ann.remove}
+          onClear={ann.clear}
+          onCopy={ann.copy}
+        />
+      )}
+      </AnnotationGlobalProvider>
     </JSONUIProvider>
   );
 }
@@ -950,7 +992,13 @@ function CellBody({ cell }: { cell: CellExecution }): React.ReactElement {
           </Alert>
         )}
         {cell.spec !== null && (
-          <Renderer spec={cell.spec} registry={webRegistry} />
+          <AnnotationCellProvider
+            cellId={cell.cell.id}
+            lens={cell.cell.lens}
+            queryRef={cell.cell.query?.ref}
+          >
+            <Renderer spec={cell.spec} registry={webRegistry} />
+          </AnnotationCellProvider>
         )}
         {cell.error === null && cell.spec === null && cell.pending && (
           <div className="space-y-2">

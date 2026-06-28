@@ -2,6 +2,9 @@ import React from "react";
 import type { CardRuntimeProps } from "@modernrelay/notebook-core";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
+import { cn } from "@/lib/utils";
+import { useAnnotation } from "../annotation-context.js";
+import { AnnotationMarker } from "./AnnotationMarker.js";
 
 interface ComponentCtx<P> {
   props: P;
@@ -15,6 +18,7 @@ function fmt(v: unknown): string {
 export function Card({
   props: p,
 }: ComponentCtx<CardRuntimeProps>): React.ReactElement {
+  const annot = useAnnotation();
   const row = p.rows[0];
   if (!row) {
     return (
@@ -34,11 +38,28 @@ export function Card({
         badge: false,
       }));
   const title = p.title_column ? fmt(row[p.title_column]) : "";
+  const akey =
+    title || (fields[0] ? fmt(row[fields[0].key]) : "") || "card";
+  const annotated = annot.active && annot.isAnnotated(akey);
   // Frameless: the cell card is the only frame (no inner border/padding).
   return (
-    <div>
+    <div
+      className={cn(annot.active && "cursor-crosshair")}
+      {...(annot.active
+        ? {
+            onClick: (e: React.MouseEvent) =>
+              annot.annotate(
+                { key: akey, headline: title || akey, data: row },
+                e,
+              ),
+          }
+        : {})}
+    >
       {title && (
-        <h3 className="mb-3 text-base font-semibold text-foreground">{title}</h3>
+        <h3 className="mb-3 flex items-center gap-1.5 text-base font-semibold text-foreground">
+          {annotated && <AnnotationMarker />}
+          {title}
+        </h3>
       )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         {fields.map((f) => {
