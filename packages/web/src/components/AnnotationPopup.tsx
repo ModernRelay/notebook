@@ -8,9 +8,10 @@ import { A } from "./annotation-style.js";
 const INTENTS: AnnotationIntent[] = ["fix", "change", "question", "approve"];
 
 /**
- * Anchored note popup, styled as agentation's dark floating card (#1a1a1a,
- * 16px radius, soft drop + 1px inner ring). Centered under the clicked entity.
- * The parent keys this by entity id, so state resets between targets.
+ * Anchored note popup — a faithful port of agentation's annotation popup
+ * (#1a1a1a card, 16px radius, soft drop + 1px inner ring, single-line header,
+ * rows=2 textarea, accent-focus, delete pinned left, pill actions). Centered
+ * under the clicked entity. Parent keys this by entity id so state resets.
  */
 export function AnnotationPopup({
   pending,
@@ -27,6 +28,7 @@ export function AnnotationPopup({
   const [intent, setIntent] = useState<AnnotationIntent | undefined>(
     pending.existing?.intent,
   );
+  const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     ref.current?.focus();
@@ -37,19 +39,15 @@ export function AnnotationPopup({
   // Centered under the entity (agentation anchors with translateX(-50%)).
   const center = pending.rect.left + pending.rect.width / 2;
   const left = Math.min(Math.max(center, 148), Math.max(148, window.innerWidth - 148));
-  const top = Math.min(pending.rect.bottom + 8, Math.max(8, window.innerHeight - 260));
+  const top = Math.min(pending.rect.bottom + 8, Math.max(8, window.innerHeight - 280));
 
   return (
     <>
-      <div
-        className="fixed inset-0"
-        style={{ zIndex: 100000 }}
-        onClick={onClose}
-      />
+      <div className="fixed inset-0" style={{ zIndex: 100000 }} onClick={onClose} />
       <div
         role="dialog"
         aria-label="Annotate entity"
-        className="fixed w-[280px] rounded-2xl px-4 pb-3.5 pt-3 text-white"
+        className="fixed w-[280px] rounded-2xl px-4 pt-3 pb-3.5 text-white"
         style={{
           top,
           left,
@@ -61,30 +59,35 @@ export function AnnotationPopup({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 min-w-0">
-          <div className="truncate text-xs text-white/50">
-            {pending.lens} · <span className="font-mono">{pending.draft.key}</span>
-          </div>
-          <div className="truncate text-[0.8125rem] font-medium">
-            {pending.draft.headline || pending.draft.key}
-          </div>
+        {/* Single-line header — the entity (agentation's `.element`). */}
+        <div className="mb-[0.5625rem] flex items-center gap-1.5 truncate text-xs">
+          <span className="font-mono text-white/70">{pending.draft.key}</span>
+          {pending.draft.headline && pending.draft.headline !== pending.draft.key && (
+            <span className="truncate text-white/40">{pending.draft.headline}</span>
+          )}
         </div>
+
         <textarea
           ref={ref}
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.stopPropagation();
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               save();
             }
             if (e.key === "Escape") onClose();
           }}
           placeholder="Note for the agent…"
-          rows={3}
-          className="w-full resize-none rounded-lg border border-white/15 bg-white/5 px-2.5 py-2 text-[0.8125rem] text-white outline-none placeholder:text-white/30 focus:border-[color:var(--ag-accent)]"
-          style={{ ["--ag-accent" as string]: A.blue }}
+          rows={2}
+          className="box-border w-full resize-none rounded-lg border bg-white/5 px-2.5 py-2 text-[0.8125rem] text-white outline-none placeholder:text-white/35"
+          style={{ borderColor: focused ? A.accent : "rgba(255,255,255,0.15)" }}
         />
+
+        {/* Intent (our addition, kept compact). */}
         <div className="mt-2 flex flex-wrap gap-1">
           {INTENTS.map((it) => {
             const on = intent === it;
@@ -99,45 +102,49 @@ export function AnnotationPopup({
                     ? "border-transparent text-white"
                     : "border-white/15 text-white/50 hover:text-white/80",
                 )}
-                style={on ? { background: A.blue } : undefined}
+                style={on ? { background: A.accent } : undefined}
               >
                 {it}
               </button>
             );
           })}
         </div>
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div>
-            {pending.existing && (
-              <button
-                type="button"
-                aria-label="Delete annotation"
-                title="Delete"
-                onClick={() => onRemove(pending.existing!.id)}
-                className="flex size-7 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-white"
-              >
-                <Trash2Icon className="size-3.5" />
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
+
+        {/* Actions: delete pinned left (margin-right:auto), cancel + submit right. */}
+        <div className="mt-2 flex items-center justify-end gap-1.5">
+          {pending.existing && (
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-lg px-2.5 py-1 text-xs text-white/50 transition-colors hover:text-white/80"
+              aria-label="Delete annotation"
+              title="Delete"
+              onClick={() => onRemove(pending.existing!.id)}
+              className="mr-auto flex size-7 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-[color:var(--ag-red-bg)] hover:text-[color:var(--ag-red)]"
+              style={
+                {
+                  ["--ag-red" as string]: A.red,
+                  ["--ag-red-bg" as string]: "color-mix(in srgb, " + A.red + " 25%, transparent)",
+                } as React.CSSProperties
+              }
             >
-              Cancel
+              <Trash2Icon className="size-3.5" />
             </button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={note.trim() === "" && !pending.existing}
-              className="rounded-lg px-3 py-1 text-xs font-medium text-white transition-[filter] hover:brightness-90 disabled:opacity-40"
-              style={{ background: A.blue }}
-            >
-              Save
-            </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl px-3.5 py-1.5 text-xs font-medium text-white/50 transition-colors hover:bg-white/10 hover:text-white/80"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={note.trim() === "" && !pending.existing}
+            className="rounded-2xl px-3.5 py-1.5 text-xs font-medium text-white transition-[filter] hover:brightness-90"
+            style={{ background: A.accent, opacity: note.trim() || pending.existing ? 1 : 0.4 }}
+          >
+            {pending.existing ? "Save" : "Add"}
+          </button>
         </div>
       </div>
     </>

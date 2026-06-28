@@ -87,7 +87,7 @@ import {
 } from "./annotation-context.js";
 import { annotationId } from "./annotations-store.js";
 import { AnnotationPopup } from "./components/AnnotationPopup.js";
-import { AnnotationPanel } from "./components/AnnotationPanel.js";
+import { AnnotationToolbar } from "./components/AnnotationToolbar.js";
 
 // react-grid-layout, width-measured + responsive (stacks to 1 column on narrow
 // viewports). The canvas engine: drag to place, resize from edges, vertical
@@ -377,16 +377,6 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
               >
                 {editing ? "Done" : "Edit layout"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => ann.setActive((a) => !a)}
-                aria-pressed={ann.active}
-                className={cn(ann.active && "border-primary text-foreground")}
-              >
-                {ann.active ? "Done annotating" : "Annotate"}
-              </Button>
               <AppearanceMenu
                 appearance={appearance}
                 onChange={updateAppearance}
@@ -539,15 +529,15 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
           onClose={ann.closePopup}
         />
       )}
-      {(ann.active || ann.session.items.length > 0) && (
-        <AnnotationPanel
-          session={ann.session}
-          onInstruction={ann.setInstruction}
-          onRemove={ann.remove}
-          onClear={ann.clear}
-          onCopy={ann.copy}
-        />
-      )}
+      <AnnotationToolbar
+        active={ann.active}
+        onToggleActive={ann.setActive}
+        session={ann.session}
+        onInstruction={ann.setInstruction}
+        onRemove={ann.remove}
+        onClear={ann.clear}
+        onCopy={ann.copy}
+      />
       </AnnotationGlobalProvider>
     </JSONUIProvider>
   );

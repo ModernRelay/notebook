@@ -6,6 +6,8 @@
  */
 export const A = {
   blue: "#3b82f6",
+  /** Popup/submit accent (agentation's default `accentColor`). */
+  accent: "#3c82f7",
   green: "#22c55e",
   red: "#ef4444",
   surface: "#1a1a1a",
