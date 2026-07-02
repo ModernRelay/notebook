@@ -205,3 +205,43 @@ function changeOutput(branch: string) {
     affected_edges: 0,
   };
 }
+
+describe("ServerSource.mutate — result plumbing", () => {
+  it("returns the server's affected counts for a catalog ref mutation", async () => {
+    const invokeMutation = vi.fn(async () => ({
+      branch: "main",
+      query_name: "approve",
+      affected_nodes: 2,
+      affected_edges: 1,
+    }));
+    const source = new ServerSource(fakeClient({ invokeMutation }));
+    const result = await source.mutate(
+      {
+        params: { spec: { ref: "approve" } },
+        resolvedParams: {},
+      },
+      { readTarget: {}, writeTarget: {}, state: {} },
+    );
+    expect(result).toEqual({ kind: "ok", affected: { nodes: 2, edges: 1 } });
+  });
+
+  it("returns affected counts for the rawGq escape hatch too (0 = no-op visible)", async () => {
+    const mutate = vi.fn(async () => ({
+      branch: "main",
+      query_name: "m",
+      affected_nodes: 0,
+      affected_edges: 0,
+    }));
+    const source = new ServerSource(fakeClient({ mutate }), {
+      allowRawGq: true,
+    });
+    const result = await source.mutate(
+      {
+        params: { spec: { rawGq: "query m($x: String){ update T set { a: $x } where slug = $x }" } },
+        resolvedParams: { x: "nope" },
+      },
+      { readTarget: {}, writeTarget: {}, state: {} },
+    );
+    expect(result).toEqual({ kind: "ok", affected: { nodes: 0, edges: 0 } });
+  });
+});

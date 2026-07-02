@@ -30,17 +30,29 @@ export function Select({
     label: opt === "" ? "— any —" : opt,
     value: toUi(opt),
   }));
+  // The sentinel is only a real item when "" is among the options. With no ""
+  // option and nothing selected, pass null so Base UI renders the placeholder
+  // — mapping to the sentinel there would print the raw "__any__" string.
+  const hasAnyOption = p.options.includes("");
+  const uiValue =
+    value === undefined || value === ""
+      ? hasAnyOption
+        ? ANY
+        : null
+      : value;
 
   return (
     <label className="inline-flex items-center gap-2 text-sm text-foreground">
-      {p.label && <span className="text-muted-foreground">{p.label}</span>}
+      {p.label ? <span className="text-muted-foreground">{p.label}</span> : null}
       <SelectRoot
         items={items}
-        value={toUi(value ?? "")}
-        onValueChange={(next) => setValue(fromUi(String(next)))}
+        value={uiValue}
+        onValueChange={(next) =>
+          setValue(next == null ? "" : fromUi(String(next)))
+        }
       >
         <SelectTrigger className="w-auto min-w-44">
-          <SelectValue />
+          <SelectValue placeholder="Select…" />
         </SelectTrigger>
         <SelectPopup>
           {items.map((it) => (

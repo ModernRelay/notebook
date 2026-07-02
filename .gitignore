@@ -5,6 +5,8 @@ dist/
 .env
 .env.*
 !.env.example
+# local RustFS dev defaults (rustfsadmin) — needed by scripts/server-demo-s3.sh
+!examples/mutation-demo/.env.omni
 *.log
 *.pid
 .vite/

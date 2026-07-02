@@ -1,0 +1,292 @@
+version: 1
+title: Mutation demo — task review queue (RustFS-backed)
+server: http://127.0.0.1:8090
+graph: tasks
+
+# A purpose-built harness for every mutation primitive. Each data cell binds to a
+# server-owned read query (query.ref → POST /graphs/tasks/queries/{ref}); each
+# action fires a server-owned catalog mutation the same way (mutation.ref, or the
+# rawGq escape hatch). Identity is a typed param from the clicked row ({ $row: slug })
+# or notebook state ({ $state: /ptr }). State is shared across tabs — picking a task
+# on Edit drives Assign and Comment. After a successful write the runtime re-reads
+# only the cells whose query.ref is in the mutation's `invalidates` list (plus the
+# originating cell); a mutation without `invalidates` falls back to re-read-all
+# (see raw_approve). Success shows a toast with rows-affected; a write that
+# matches no rows rolls back its optimistic overlay and warns inline.
+#
+# The @key field is `slug` (`id` is reserved by the storage layer); columns label it "ID".
+# Bootstrap the graph first:  scripts/server-demo-s3.sh --serve
+
+cells:
+  # ── Review queue ───────────────────────────────────────────────────────────
+  # ActionList row mutations: Approve/Reject with optimistic status overlays.
+  - id: review_queue
+    tab: Review queue
+    lens: ActionList
+    query: { ref: tasks_in_review }
+    props:
+      id_column: slug
+      title_column: title
+      meta_columns: [priority]
+      status_field: status
+      actions:
+        - label: Approve
+          variant: primary
+          mutation:
+            ref: approve_task
+            params: { slug: { $row: slug } }
+            optimistic: { set: { status: approved } }
+            invalidates: [tasks_in_review, tasks_by_status, all_tasks, get_task]
+        - label: Reject
+          variant: danger
+          mutation:
+            ref: reject_task
+            params: { slug: { $row: slug } }
+            optimistic: { set: { status: rejected } }
+            invalidates: [tasks_in_review, tasks_by_status, all_tasks, get_task]
+
+  # Drafts → Start review (exercises start_review). Approving here is intentionally
+  # absent: a draft moves to review first.
+  - id: drafts_queue
+    tab: Review queue
+    lens: ActionList
+    width: half
+    query: { ref: tasks_by_status, params: { status: draft } }
+    props:
+      id_column: slug
+      title_column: title
+      meta_columns: [priority]
+      status_field: status
+      actions:
+        - label: Start review
+          variant: primary
+          mutation:
+            ref: start_review
+            params: { slug: { $row: slug } }
+            optimistic: { set: { status: review } }
+            invalidates: [tasks_in_review, tasks_by_status, all_tasks, get_task]
+
+  # Live full list — watch a row's status change after each action above.
+  - id: all_tasks_review
+    tab: Review queue
+    lens: Table
+    width: half
+    query: { ref: all_tasks }
+    props:
+      columns:
+        - { key: slug, label: ID }
+        - { key: title, label: Task }
+        - { key: status, label: Status, badge: true }
+        - { key: priority, label: Priority, badge: true }
+
+  # ── Edit task ──────────────────────────────────────────────────────────────
+  # Pick a task (writes /selectedTask, shared with Assign + Comment), then edit
+  # it in ONE Form card: typed fields prefilled from get_task, one Save that
+  # dispatches only the fields you actually changed (per-field mutations).
+  # Identity params use { $row: slug } — always the row shown in the form.
+  - id: edit_pick
+    tab: Edit task
+    lens: Table
+    width: half
+    query: { ref: all_tasks }
+    props:
+      select_state: /selectedTask
+      select_column: slug
+      columns:
+        - { key: slug, label: ID }
+        - { key: title, label: Task }
+        - { key: status, label: Status, badge: true }
+        - { key: priority, label: Priority, badge: true }
+        - { key: days, label: Est. days, align: right }
+
+  - id: edit_form
+    tab: Edit task
+    lens: Form
+    width: half
+    height: tall
+    query:
+      ref: get_task
+      params: { slug: { $state: /selectedTask, default: t1 } }
+    props:
+      key_column: slug
+      submit_label: Save changes
+      fields:
+        - name: title
+          label: Title
+          kind: text
+          required: true
+          mutation:
+            ref: set_task_title
+            params:
+              slug: { $row: slug }
+              title: { $input: title }
+            invalidates: [all_tasks, tasks_by_status, get_task]
+        - name: days
+          label: Estimated days
+          kind: number
+          column: days
+          min: 0
+          step: 1
+          mutation:
+            ref: set_estimated_days
+            params:
+              slug: { $row: slug }
+              days: { $input: days }
+            invalidates: [all_tasks, tasks_by_status, get_task]
+        - name: priority
+          label: Priority
+          kind: select
+          options: [low, medium, high, urgent]
+          mutation:
+            ref: set_priority
+            params:
+              slug: { $row: slug }
+              priority: { $input: priority }
+            invalidates: [all_tasks, tasks_by_status, get_task]
+        - name: description
+          label: Description
+          kind: textarea
+          placeholder: What needs doing?
+          mutation:
+            ref: set_description
+            params:
+              slug: { $row: slug }
+              description: { $input: description }
+            invalidates: [get_task]
+
+  # ── Assign ─────────────────────────────────────────────────────────────────
+  # Two graph-driven pickers feed a multi-$state-param edge insert.
+  - id: assign_task_pick
+    tab: Assign
+    lens: Table
+    width: half
+    query: { ref: all_tasks }
+    props:
+      select_state: /selectedTask
+      select_column: slug
+      columns:
+        - { key: slug, label: ID }
+        - { key: title, label: Task }
+
+  - id: assign_reviewer_pick
+    tab: Assign
+    lens: Table
+    width: half
+    query: { ref: all_reviewers }
+    props:
+      select_state: /selectedReviewer
+      select_column: slug
+      columns:
+        - { key: name, label: Reviewer }
+        - { key: team, label: Team, badge: true }
+
+  # The Assign button lives INSIDE the assignees card (cell.controls) — it acts
+  # on this cell's data view, so it doesn't get a card of its own.
+  - id: assign_current
+    tab: Assign
+    lens: Table
+    width: half
+    query:
+      ref: task_assignees
+      params: { slug: { $state: /selectedTask, default: t1 } }
+    controls:
+      - lens: Button
+        props:
+          label: Assign reviewer to task
+          variant: primary
+          requires: [/selectedTask, /selectedReviewer]
+          mutation:
+            ref: assign_task
+            params:
+              task: { $state: /selectedTask }
+              reviewer: { $state: /selectedReviewer }
+            invalidates: [task_assignees]
+    props:
+      columns:
+        - { key: name, label: Assigned reviewer }
+        - { key: team, label: Team, badge: true }
+
+  # ── Filter ─────────────────────────────────────────────────────────────────
+  # The Select rides inline on the table it filters (cell.controls): one card,
+  # control above the data view. State change → dependent query re-read.
+  - id: filter_tasks
+    tab: Filter
+    lens: Table
+    query:
+      ref: tasks_by_status
+      params: { status: { $state: /filter/status, default: review } }
+    controls:
+      - lens: Select
+        props:
+          label: Status
+          options: [draft, review, approved, rejected]
+          value: { $bindState: /filter/status }
+    props:
+      columns:
+        - { key: slug, label: ID }
+        - { key: title, label: Task }
+        - { key: status, label: Status, badge: true }
+        - { key: priority, label: Priority, badge: true }
+        - { key: days, label: Est. days, align: right }
+
+  # ── Comment / raw ──────────────────────────────────────────────────────────
+  # Create-form: one Form card, no query (blank fields), form-level `mutations`
+  # fire together on submit — add_comment (node insert) consumes BOTH fields,
+  # then link_comment (edge insert) chains the new comment to the selected
+  # task. Sequential commits: if no task is selected the link step fails and
+  # the error reports "(1/2 fields saved)" — the batch semantics, visible.
+  - id: comment_form
+    tab: Comment / raw
+    lens: Form
+    width: half
+    props:
+      submit_label: Add + link comment
+      fields:
+        - name: slug
+          label: Comment id
+          kind: text
+          required: true
+          placeholder: e.g. c100
+        - name: text
+          label: Comment
+          kind: textarea
+          required: true
+          placeholder: Write a comment…
+      mutations:
+        - ref: add_comment
+          params:
+            slug: { $input: slug }
+            text: { $input: text }
+          invalidates: [task_comments]
+        - ref: link_comment
+          params:
+            comment: { $input: slug }
+            task: { $state: /selectedTask }
+          invalidates: [task_comments]
+
+  - id: comment_list
+    tab: Comment / raw
+    lens: Table
+    width: half
+    query:
+      ref: task_comments
+      params: { slug: { $state: /selectedTask, default: t1 } }
+    props:
+      columns:
+        - { key: slug, label: Comment }
+        - { key: text, label: Text, wrap: true }
+
+  # rawGq escape hatch — inline .gq, no catalog ref. Approves the selected task.
+  - id: raw_approve
+    tab: Comment / raw
+    lens: Button
+    width: half
+    props:
+      label: Approve selected (rawGq)
+      variant: default
+      requires: [/selectedTask]
+      mutation:
+        rawGq: |
+          query m($slug: String) { update Task set { status: "approved" } where slug = $slug }
+        params:
+          slug: { $state: /selectedTask }

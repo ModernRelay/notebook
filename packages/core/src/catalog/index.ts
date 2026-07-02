@@ -30,6 +30,13 @@ import {
   type ActionListRuntimeProps,
 } from "./lenses/action_list.js";
 import {
+  FormAuthorPropsSchema,
+  FormRuntimePropsSchema,
+  FormDescription,
+  type FormAuthorProps,
+  type FormRuntimeProps,
+} from "./lenses/form.js";
+import {
   TimelineAuthorPropsSchema,
   TimelineRuntimePropsSchema,
   TimelineDescription,
@@ -69,11 +76,20 @@ import {
   SelectRuntimePropsSchema,
   SelectDescription,
 } from "./lenses/select.js";
+import {
+  TextInputRuntimePropsSchema,
+  TextInputDescription,
+} from "./lenses/text_input.js";
+import {
+  NumberInputRuntimePropsSchema,
+  NumberInputDescription,
+} from "./lenses/number_input.js";
 
 export * from "./lenses/table.js";
 export * from "./lenses/path.js";
 export * from "./lenses/subgraph.js";
 export * from "./lenses/action_list.js";
+export * from "./lenses/form.js";
 export * from "./lenses/timeline.js";
 export * from "./lenses/card.js";
 export * from "./lenses/quote.js";
@@ -81,6 +97,8 @@ export * from "./lenses/text.js";
 export * from "./lenses/button.js";
 export * from "./lenses/toggle.js";
 export * from "./lenses/select.js";
+export * from "./lenses/text_input.js";
+export * from "./lenses/number_input.js";
 
 /** A typed row returned by a Source.read(). */
 export type ResultRow = Record<string, unknown>;
@@ -112,6 +130,7 @@ export const lensComponents = {
   Path:       { props: PathRuntimePropsSchema,       description: PathDescription },
   Subgraph:   { props: SubgraphRuntimePropsSchema,   description: SubgraphDescription },
   ActionList: { props: ActionListRuntimePropsSchema, description: ActionListDescription },
+  Form:       { props: FormRuntimePropsSchema,       description: FormDescription },
   Timeline:   { props: TimelineRuntimePropsSchema,   description: TimelineDescription },
   Card:       { props: CardRuntimePropsSchema,       description: CardDescription },
   Quote:      { props: QuoteRuntimePropsSchema,      description: QuoteDescription },
@@ -119,6 +138,8 @@ export const lensComponents = {
   Button:     { props: ButtonRuntimePropsSchema,     description: ButtonDescription },
   Toggle:     { props: ToggleRuntimePropsSchema,     description: ToggleDescription },
   Select:     { props: SelectRuntimePropsSchema,     description: SelectDescription },
+  TextInput:  { props: TextInputRuntimePropsSchema,  description: TextInputDescription },
+  NumberInput:{ props: NumberInputRuntimePropsSchema,description: NumberInputDescription },
 } as const;
 
 /**
@@ -130,7 +151,7 @@ export const lensComponents = {
  * `approve` / `reject` are demo handler-bound actions. The host renderer
  * (App.tsx) provides their implementations via JSONUIProvider.handlers.
  */
-import { MutationParamsSchema } from "../spec/index.js";
+import { MutationDispatchSchema } from "../spec/index.js";
 
 export const lensActions = {
   setState: {
@@ -138,17 +159,18 @@ export const lensActions = {
     description: "Write a value to the state model at the given JSON pointer.",
   },
   /**
-   * Atomic mutation against omnigraph-server (via the @modernrelay/omnigraph
-   * SDK). Each invocation is one commit. The cell author declares the mutation
-   * shape via ActionList.actions[*].mutation (a `ref` catalog mutation or a
-   * `rawGq` escape hatch + typed `params`); the lens supplies the clicked
-   * `row` and `rowKey` at click time, and the runtime resolves `$row`/`$state`
-   * params and any optimistic overlay.
+   * Mutation against omnigraph-server (via the @modernrelay/omnigraph SDK).
+   * Two accepted shapes: a single mutation `{ spec, row?, rowKey? }` (each
+   * invocation one commit — an ActionList row button supplies the clicked
+   * `row`/`rowKey`, a mutation Button just `spec`), or a Form's dirty batch
+   * `{ mutations: [{spec}], input }` — sequential independent commits with
+   * one saving flag and one final re-read. The runtime resolves
+   * `$row`/`$state`/`$input` params and any optimistic overlay.
    */
   mutate: {
-    params: MutationParamsSchema,
+    params: MutationDispatchSchema,
     description:
-      "Run one atomic mutation against the source. Params: { spec: MutationSpec, row, rowKey } — the lens supplies the clicked row; the runtime resolves params and invokes the source.",
+      "Run mutation(s) against the source. Single: { spec, row?, rowKey? }. Form batch: { mutations: [{spec}], input } — dirty fields only, resolved via $input.",
   },
 } as const;
 
@@ -194,11 +216,20 @@ export function assembleControlSpec(
   cellId: string,
   kind: ComponentKind,
   props: Record<string, unknown>,
-  extra?: { on?: Record<string, ActionBinding>; visible?: VisibilityCondition },
+  extra?: {
+    on?: Record<string, ActionBinding>;
+    visible?: VisibilityCondition;
+    /** Runtime-injected props (e.g. a mutation Button's `runtime` block). */
+    runtimeProps?: Record<string, unknown>;
+  },
 ): LensSpec {
+  const merged =
+    extra?.runtimeProps !== undefined
+      ? { ...props, ...extra.runtimeProps }
+      : props;
   return {
     root: cellId,
-    elements: { [cellId]: buildElement(kind, props, extra) },
+    elements: { [cellId]: buildElement(kind, merged, extra) },
   };
 }
 
@@ -245,6 +276,11 @@ function buildRuntimeProps(
       const author: ActionListAuthorProps =
         ActionListAuthorPropsSchema.parse(authorProps);
       const runtime: ActionListRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Form": {
+      const author: FormAuthorProps = FormAuthorPropsSchema.parse(authorProps);
+      const runtime: FormRuntimeProps = { ...author, rows: result.rows };
       return runtime as unknown as Record<string, unknown>;
     }
     case "Timeline": {

@@ -99,6 +99,21 @@ export interface NotebookExecution {
 
 export type RuntimeStatus = "loading" | "ready" | "fatal";
 
+/**
+ * The last successful mutation's outcome — the host shell's toast feed.
+ * Only success paths ever write it (errors and no-ops go to `mutationError`
+ * or per-cell channels), so a toast keyed on `seq` can never announce a
+ * failure. Last-write-wins; each distinct `seq` is one dispatch.
+ */
+export interface MutationFeedback {
+  kind: "success";
+  /** e.g. "Saved — 1 row" / "Saved — 2 fields, 3 rows" / "Saved". */
+  message: string;
+  /** Originating cell, when known. */
+  cellId?: string;
+  seq: number;
+}
+
 export interface RuntimeSnapshot {
   status: RuntimeStatus;
   notebook: Notebook;
@@ -109,6 +124,7 @@ export interface RuntimeSnapshot {
   finishedAt: number | null;
   error: string | null;
   mutationError: string | null;
+  mutationFeedback: MutationFeedback | null;
   warnings: string[];
 }
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseNotebook, MutationSpecSchema } from "./index.js";
+import {
+  parseNotebook,
+  MutationSpecSchema,
+  MutationParamsSchema,
+  MutationBatchParamsSchema,
+} from "./index.js";
 
 describe("parseNotebook", () => {
   it("parses a server-mode notebook with a catalog query ref", () => {
@@ -349,6 +354,138 @@ describe("MutationSpecSchema", () => {
         field: "status",
         value: "approved",
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe("input controls + mutation Button", () => {
+  it("parses TextInput/NumberInput controls and a mutation Button with requires", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Edit
+cells:
+  - { id: name, lens: TextInput, props: { label: Name, value: { $bindState: /draft/name } } }
+  - { id: qty,  lens: NumberInput, props: { value: { $bindState: /draft/qty } } }
+  - id: save
+    lens: Button
+    props:
+      label: Save
+      requires: [/sel, /draft/name]
+      mutation:
+        ref: rename
+        params: { id: { $state: /sel }, name: { $state: /draft/name } }
+`);
+    expect(nb.cells[0]?.lens).toBe("TextInput");
+    expect(nb.cells[1]?.lens).toBe("NumberInput");
+    const btn = nb.cells[2]?.props as {
+      mutation: { ref: string };
+      requires: string[];
+    };
+    expect(btn.mutation.ref).toBe("rename");
+    expect(btn.requires).toEqual(["/sel", "/draft/name"]);
+  });
+
+  it("rejects a control cell that carries a query", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - { id: t, lens: TextInput, query: { ref: q }, props: {} }
+`),
+    ).toThrow();
+  });
+
+  it("MutationParams accepts a non-row spec (no row/rowKey)", () => {
+    expect(
+      MutationParamsSchema.safeParse({
+        spec: { ref: "rename", params: { id: { $state: "/sel" } } },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("Form cells + batch dispatch schema", () => {
+  it("parses a Form cell WITH a prefill query", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Edit
+cells:
+  - id: f
+    lens: Form
+    query: { ref: get_task, params: { slug: { $state: /sel } } }
+    props:
+      key_column: slug
+      fields:
+        - name: title
+          kind: text
+          mutation: { ref: set_title, params: { slug: { $state: /sel }, title: { $input: title } } }
+`);
+    expect(nb.cells[0]?.lens).toBe("Form");
+    expect(nb.cells[0]?.query?.ref).toBe("get_task");
+  });
+
+  it("parses a Form cell WITHOUT a query (create-form)", () => {
+    const nb = parseNotebook(`
+version: 1
+title: Create
+cells:
+  - id: f
+    lens: Form
+    props:
+      fields:
+        - name: name
+          kind: text
+          mutation: { ref: add_item, params: { name: { $input: name } } }
+`);
+    expect(nb.cells[0]?.lens).toBe("Form");
+    expect(nb.cells[0]?.query).toBeUndefined();
+  });
+
+  it("still rejects a non-Form data cell without a query", () => {
+    expect(() =>
+      parseNotebook(`
+version: 1
+title: x
+cells:
+  - { id: t, lens: Table, props: { columns: [{ key: x, label: X }] } }
+`),
+    ).toThrow();
+  });
+
+  it("MutationBatchParams accepts { mutations, input } and rejects empty batches", () => {
+    expect(
+      MutationBatchParamsSchema.safeParse({
+        mutations: [{ spec: { ref: "set_title", params: { t: { $input: "title" } } } }],
+        input: { title: "T" },
+      }).success,
+    ).toBe(true);
+    expect(
+      MutationBatchParamsSchema.safeParse({ mutations: [], input: {} }).success,
+    ).toBe(false);
+    expect(
+      MutationBatchParamsSchema.safeParse({
+        mutations: [{ spec: { ref: "r" }, extra: 1 }],
+        input: {},
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("MutationSpec.invalidates", () => {
+  it("parses invalidates (query refs)", () => {
+    const r = MutationSpecSchema.safeParse({
+      ref: "approve",
+      params: { slug: { $row: "slug" } },
+      invalidates: ["tasks_in_review", "all_tasks"],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("strict schema rejects a misspelling", () => {
+    expect(
+      MutationSpecSchema.safeParse({ ref: "approve", invalidate: ["x"] })
+        .success,
     ).toBe(false);
   });
 });

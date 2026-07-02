@@ -17,17 +17,20 @@ const fakeResult: QueryResult = {
 };
 
 describe("lensComponents", () => {
-  it("registers all eleven components (8 lenses + 3 controls)", () => {
+  it("registers all fourteen components (9 lenses + 5 controls)", () => {
     expect(Object.keys(lensComponents).sort()).toEqual([
       "ActionList",
       "Button",
       "Card",
+      "Form",
+      "NumberInput",
       "Path",
       "Quote",
       "Select",
       "Subgraph",
       "Table",
       "Text",
+      "TextInput",
       "Timeline",
       "Toggle",
     ]);
@@ -136,5 +139,84 @@ describe("assembleLensSpec", () => {
     expect(() =>
       assembleLensSpec("bad", "Quote", { meta_columns: [""] }, fakeResult),
     ).toThrow();
+  });
+});
+
+describe("Form lens", () => {
+  const FIELD = {
+    name: "title",
+    kind: "text",
+    mutation: { ref: "set_title", params: { t: { $input: "title" } } },
+  };
+
+  it("assembles a Form spec with rows merged in", () => {
+    const spec = assembleLensSpec(
+      "f1",
+      "Form",
+      { fields: [FIELD], key_column: "slug" },
+      fakeResult,
+    );
+    expect(spec.elements["f1"]?.type).toBe("Form");
+    expect((spec.elements["f1"]?.props as { rows: unknown[] }).rows).toEqual(
+      fakeResult.rows,
+    );
+  });
+
+  it("rejects a select field without options", () => {
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        {
+          fields: [
+            { name: "p", kind: "select", mutation: { ref: "set_p" } },
+          ],
+        },
+        fakeResult,
+      ),
+    ).toThrow(/requires non-empty options/);
+  });
+
+  it("rejects duplicate field names", () => {
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        { fields: [FIELD, FIELD] },
+        fakeResult,
+      ),
+    ).toThrow(/duplicate form field name/);
+  });
+});
+
+describe("Form lens — form-level mutations (create-form)", () => {
+  it("accepts fields without per-field mutations when form-level mutations exist", () => {
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        {
+          fields: [
+            { name: "slug", kind: "text" },
+            { name: "text", kind: "textarea" },
+          ],
+          mutations: [
+            { ref: "add_comment", params: { slug: { $input: "slug" }, text: { $input: "text" } } },
+          ],
+        },
+        fakeResult,
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects a form with no mutation anywhere", () => {
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        { fields: [{ name: "slug", kind: "text" }] },
+        fakeResult,
+      ),
+    ).toThrow(/form declares no mutation/);
   });
 });

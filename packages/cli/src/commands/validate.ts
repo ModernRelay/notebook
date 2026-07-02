@@ -159,16 +159,46 @@ function validateCatalogRefs(
       }
     }
 
-    // Action mutations: a `ref` must resolve to a stored MUTATION; `rawGq` is a
-    // capability-gated escape hatch (warn — can't catalog-check it).
-    const actions = cell.props.actions;
-    if (!Array.isArray(actions)) return;
-    actions.forEach((action, aIdx) => {
-      if (!action || typeof action !== "object") return;
-      const mutation = (action as Record<string, unknown>).mutation;
-      if (!mutation || typeof mutation !== "object") return;
-      const m = mutation as { ref?: unknown; rawGq?: unknown; params?: unknown };
-      const mBase = `cells/${index}/props/actions/${aIdx}/mutation`;
+    // Declared mutations — ActionList `actions[*].mutation`, Form
+    // `fields[*].mutation`, and a mutation Button's `props.mutation`. A `ref`
+    // must resolve to a stored MUTATION; `rawGq` is a capability-gated escape
+    // hatch (warn — can't catalog-check it).
+    const validateMutationRef = (candidate: unknown, mBase: string): void => {
+      if (!candidate || typeof candidate !== "object") return;
+      const m = candidate as {
+        ref?: unknown;
+        rawGq?: unknown;
+        params?: unknown;
+        invalidates?: unknown;
+      };
+      // `invalidates` entries must be catalog READ queries — checked for
+      // every mutation shape, including rawGq (invalidates is config, not
+      // catalog-bound to the mutation itself).
+      if (Array.isArray(m.invalidates)) {
+        m.invalidates.forEach((ref, i) => {
+          if (typeof ref !== "string") return; // schema layer catches shape
+          const entry = queries.get(ref);
+          if (entry === undefined) {
+            errors.push({
+              path: `${mBase}/invalidates/${i}`,
+              message: `catalog query '${ref}' does not exist or is not exposed`,
+              code: "unknown_ref",
+            });
+          } else if (entry.mutation) {
+            errors.push({
+              path: `${mBase}/invalidates/${i}`,
+              message: `catalog ref '${ref}' is a stored mutation; invalidates entries must be read queries`,
+              code: "wrong_query_kind",
+            });
+          } else if (
+            !notebook.cells.some((c) => c.query?.ref === ref)
+          ) {
+            warnings.push(
+              `${mBase}/invalidates/${i}: no cell in this notebook reads '${ref}' — entry has no effect`,
+            );
+          }
+        });
+      }
       if (typeof m.rawGq === "string") {
         warnings.push(
           `${mBase}.rawGq is a capability-gated escape hatch; prefer a catalog mutation.ref`,
@@ -190,7 +220,7 @@ function validateCatalogRefs(
         // read query's descriptors (would emit spurious unknown/missing errors).
         errors.push({
           path: `${mBase}/ref`,
-          message: `catalog ref '${m.ref}' is a read query; actions require a stored mutation`,
+          message: `catalog ref '${m.ref}' is a read query; mutations require a stored mutation`,
           code: "wrong_query_kind",
         });
         return;
@@ -203,23 +233,77 @@ function validateCatalogRefs(
       );
       errors.push(...mp.errors);
       warnings.push(...mp.warnings);
+    };
+
+    // Walk every mutation shape in a props bag — used for the cell's own
+    // props AND each inline control's props (`cell.controls[*].props`).
+    const walkProps = (props: Record<string, unknown>, base: string): void => {
+      const actions = props.actions;
+      if (Array.isArray(actions)) {
+        actions.forEach((action, aIdx) => {
+          if (!action || typeof action !== "object") return;
+          validateMutationRef(
+            (action as Record<string, unknown>).mutation,
+            `${base}/actions/${aIdx}/mutation`,
+          );
+        });
+      }
+      const fields = props.fields;
+      if (Array.isArray(fields)) {
+        fields.forEach((field, fIdx) => {
+          if (!field || typeof field !== "object") return;
+          validateMutationRef(
+            (field as Record<string, unknown>).mutation,
+            `${base}/fields/${fIdx}/mutation`,
+          );
+        });
+      }
+      const formLevel = props.mutations;
+      if (Array.isArray(formLevel)) {
+        formLevel.forEach((spec, mIdx) => {
+          validateMutationRef(spec, `${base}/mutations/${mIdx}`);
+        });
+      }
+      validateMutationRef(props.mutation, `${base}/mutation`);
+    };
+    walkProps(cell.props, `cells/${index}/props`);
+    (cell.controls ?? []).forEach((control, cIdx) => {
+      walkProps(control.props, `cells/${index}/controls/${cIdx}/props`);
     });
   });
 
   return { errors, warnings };
 }
 
-/** A cell needs the live catalog if it reads a `ref` or any action mutates a `ref`. */
+/** A cell needs the live catalog if it reads a `ref` or declares any `ref` mutation. */
 function cellNeedsCatalog(cell: Cell): boolean {
   if (cell.query?.ref !== undefined) return true;
-  const actions = cell.props.actions;
-  if (!Array.isArray(actions)) return false;
-  return actions.some(
-    (a) =>
-      a !== null &&
-      typeof a === "object" &&
-      typeof (a as { mutation?: { ref?: unknown } }).mutation?.ref === "string",
-  );
+  // A spec needs the catalog when it invokes by ref OR declares `invalidates`
+  // (whose entries must resolve to catalog read queries — even on a rawGq
+  // mutation).
+  const specNeedsCatalog = (s: unknown): boolean =>
+    s !== null &&
+    typeof s === "object" &&
+    (typeof (s as { ref?: unknown }).ref === "string" ||
+      (Array.isArray((s as { invalidates?: unknown }).invalidates) &&
+        ((s as { invalidates: unknown[] }).invalidates.length > 0)));
+  const hasRefMutation = (candidate: unknown): boolean =>
+    candidate !== null &&
+    typeof candidate === "object" &&
+    specNeedsCatalog((candidate as { mutation?: unknown }).mutation);
+  const propsNeedCatalog = (props: Record<string, unknown>): boolean => {
+    const actions = props.actions;
+    if (Array.isArray(actions) && actions.some(hasRefMutation)) return true;
+    const fields = props.fields;
+    if (Array.isArray(fields) && fields.some(hasRefMutation)) return true;
+    const formLevel = props.mutations;
+    if (Array.isArray(formLevel) && formLevel.some(specNeedsCatalog)) {
+      return true;
+    }
+    return hasRefMutation(props);
+  };
+  if (propsNeedCatalog(cell.props)) return true;
+  return (cell.controls ?? []).some((control) => propsNeedCatalog(control.props));
 }
 
 function validateParamMap(
@@ -281,10 +365,15 @@ function literalForValidation(
   value: unknown,
 ):
   | { kind: "literal"; value: unknown }
-  | { kind: "dynamic"; source: "state" | "row" } {
+  | { kind: "dynamic"; source: "state" | "row" | "input" } {
   // `{ $row: col }` resolves from the clicked row at runtime.
   if (isRecord(value) && "$row" in value) {
     return { kind: "dynamic", source: "row" };
+  }
+  // `{ $input: field }` resolves from a Form's submitted values — reliably
+  // present at dispatch (like $row), so no warning.
+  if (isRecord(value) && "$input" in value) {
+    return { kind: "dynamic", source: "input" };
   }
   if (isRecord(value) && "$state" in value) {
     return "default" in value
@@ -303,6 +392,7 @@ function containsStateExpr(value: unknown): boolean {
   return (
     "$state" in record ||
     "$row" in record ||
+    "$input" in record ||
     Object.values(record).some(containsStateExpr)
   );
 }

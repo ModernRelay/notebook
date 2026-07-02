@@ -1,0 +1,26 @@
+{"type":"Reviewer","data":{"slug":"alice","name":"Alice Ng","team":"backend"}}
+{"type":"Reviewer","data":{"slug":"bob","name":"Bob Reyes","team":"frontend"}}
+{"type":"Reviewer","data":{"slug":"charlie","name":"Charlie Okafor","team":"security"}}
+{"type":"Task","data":{"slug":"t1","title":"Add OAuth login flow","description":"Wire up the third-party OAuth provider and session handoff.","priority":"high","status":"review","estimatedDays":5,"createdAt":"2026-06-01"}}
+{"type":"Task","data":{"slug":"t2","title":"Fix cache invalidation bug","description":"Stale reads after a write under concurrent load.","priority":"urgent","status":"review","estimatedDays":2,"createdAt":"2026-06-03"}}
+{"type":"Task","data":{"slug":"t3","title":"Rewrite onboarding docs","description":"The quickstart is out of date with the new CLI.","priority":"low","status":"review","estimatedDays":3,"createdAt":"2026-06-04"}}
+{"type":"Task","data":{"slug":"t4","title":"Audit S3 bucket policies","description":"Tighten IAM and verify least-privilege.","priority":"high","status":"review","estimatedDays":4,"createdAt":"2026-06-05"}}
+{"type":"Task","data":{"slug":"t5","title":"Dark-mode scrollbars","description":"Scrollbars stay light in dark theme.","priority":"medium","status":"draft","estimatedDays":1,"createdAt":"2026-06-06"}}
+{"type":"Task","data":{"slug":"t6","title":"Batch the export endpoint","description":"Stream rows instead of buffering the whole result.","priority":"medium","status":"draft","estimatedDays":3,"createdAt":"2026-06-07"}}
+{"type":"Task","data":{"slug":"t7","title":"Add rate limiting","description":"Per-token sliding window at the gateway.","priority":"high","status":"approved","estimatedDays":2,"createdAt":"2026-06-08"}}
+{"type":"Task","data":{"slug":"t8","title":"Migrate to pnpm 10","description":"Lockfile + CI bump.","priority":"low","status":"approved","estimatedDays":1,"createdAt":"2026-06-09"}}
+{"type":"Task","data":{"slug":"t9","title":"Drop legacy v1 API","description":"Removed clients confirmed; sunset the routes.","priority":"medium","status":"rejected","estimatedDays":2,"createdAt":"2026-06-10"}}
+{"type":"Task","data":{"slug":"t10","title":"Profile the cold-start path","description":"First request after deploy is 1.2s.","priority":"urgent","status":"review","estimatedDays":4,"createdAt":"2026-06-11"}}
+{"type":"Comment","data":{"slug":"c1","text":"Let's confirm the redirect URI is allow-listed before approving."}}
+{"type":"Comment","data":{"slug":"c2","text":"Repro is flaky — needs a deterministic test first."}}
+{"type":"Comment","data":{"slug":"c3","text":"Security sign-off required given the IAM changes."}}
+{"edge":"AssignedTo","from":"t1","to":"alice"}
+{"edge":"AssignedTo","from":"t2","to":"alice"}
+{"edge":"AssignedTo","from":"t4","to":"charlie"}
+{"edge":"AssignedTo","from":"t10","to":"bob"}
+{"edge":"CommentedOn","from":"c1","to":"t1"}
+{"edge":"CommentedOn","from":"c2","to":"t2"}
+{"edge":"CommentedOn","from":"c3","to":"t4"}
+{"edge":"CommentedBy","from":"c1","to":"charlie"}
+{"edge":"CommentedBy","from":"c2","to":"alice"}
+{"edge":"CommentedBy","from":"c3","to":"charlie"}

@@ -3,7 +3,13 @@ import type { Cell, ControlKind, Notebook } from "../spec/index.js";
 import { assembleControlSpec, type LensSpec } from "../catalog/index.js";
 import type { CellExecution } from "./types.js";
 
-const CONTROL_KINDS: readonly ControlKind[] = ["Button", "Toggle", "Select"];
+const CONTROL_KINDS: readonly ControlKind[] = [
+  "Button",
+  "Toggle",
+  "Select",
+  "TextInput",
+  "NumberInput",
+];
 
 export function isControl(cell: Cell): boolean {
   return (CONTROL_KINDS as readonly string[]).includes(cell.lens);
@@ -30,10 +36,12 @@ export function emptyCellExecution(cell: Cell): CellExecution {
 export function buildControlCellExecution(
   cell: Cell,
   durationMs: number,
+  runtimeProps?: Record<string, unknown>,
 ): CellExecution {
   const spec = assembleControlSpec(cell.id, cell.lens, cell.props, {
     on: cell.on,
     visible: cell.visible as VisibilityCondition | undefined,
+    ...(runtimeProps !== undefined ? { runtimeProps } : {}),
   });
   return {
     cell,
