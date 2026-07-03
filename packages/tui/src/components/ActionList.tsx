@@ -73,7 +73,10 @@ export function ActionList({
         if (!row || !act) return;
         const id = String(row[p.id_column] ?? "");
         // Destructive guard: first Enter arms ([ Confirm? ]), second fires.
-        const armKey = `${focusedRow}:${focusedAction}`;
+        // Keyed by the row's stable id (not its index) so a background
+        // re-read reordering rows can never fire the confirm on a
+        // different row than the one that was armed.
+        const armKey = `${id}:${focusedAction}`;
         if (act.mutation?.confirm !== undefined && armed !== armKey) {
           setArmed(armKey);
           return;
@@ -176,7 +179,7 @@ export function ActionList({
             {isRowFocused && (
               <Box marginLeft={4}>
                 {p.actions.map((act, aIdx) => {
-                  const isArmed = armed === `${focusedRow}:${aIdx}`;
+                  const isArmed = armed === `${id}:${aIdx}`;
                   const label = isArmed
                     ? typeof act.mutation?.confirm === "string"
                       ? act.mutation.confirm
