@@ -6,6 +6,7 @@ import {
   notebookStateParams,
   readStatePointer,
   type CellExecution,
+  type MutationFeedback,
   type RuntimeSnapshot,
   type StateParam,
 } from "@modernrelay/notebook-core";
@@ -35,6 +36,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToastProvider, useToastManager } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
   CheckIcon,
@@ -316,6 +318,8 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       onStateChange={handleStateChange}
       handlers={handlers}
     >
+      <ToastProvider>
+      <SuccessToastBridge feedback={snapshot.mutationFeedback} />
       <Shell
         header={
           <div className="sticky top-0 z-30 border-b border-border bg-background">
@@ -507,8 +511,31 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
         setOpen={setCmdOpen}
         sections={commandSections}
       />
+      </ToastProvider>
     </JSONUIProvider>
   );
+}
+
+/**
+ * Bridges runtime success feedback into the toast surface. Fires one toast
+ * per distinct dispatch `seq`; initialized to the mount-time seq so a
+ * pre-mount success is never replayed. Errors/no-ops never reach
+ * `mutationFeedback`, so this can only announce real successes.
+ */
+export function SuccessToastBridge({
+  feedback,
+}: {
+  feedback: MutationFeedback | null;
+}): null {
+  const manager = useToastManager();
+  const lastSeq = React.useRef(feedback?.seq ?? 0);
+  useEffect(() => {
+    if (feedback !== null && feedback.seq !== lastSeq.current) {
+      lastSeq.current = feedback.seq;
+      manager.add({ title: feedback.message });
+    }
+  }, [feedback, manager]);
+  return null;
 }
 
 /** App shell: centered column with an optional left cell-nav and header. */

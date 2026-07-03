@@ -1,0 +1,53 @@
+// Catalog mutations — server-owned writes the notebook invokes by `ref`
+// (POST /graphs/tasks/queries/{name} with expectMutation:true). The client
+// builds no .gq and no write predicate; identity arrives as a typed param
+// from the clicked row ({ $row: slug }) or notebook state ({ $state: /ptr }).
+//
+// The @key field is `slug`. `update` takes a single `where`; edge `insert`
+// takes endpoint params, no `where`.
+
+// ── Field edits ──────────────────────────────────────
+
+query set_task_title($slug: String, $title: String) {
+    update Task set { title: $title } where slug = $slug
+}
+
+query set_estimated_days($slug: String, $days: I32) {
+    update Task set { estimatedDays: $days } where slug = $slug
+}
+
+query set_priority($slug: String, $priority: String) {
+    update Task set { priority: $priority } where slug = $slug
+}
+
+query set_description($slug: String, $description: String) {
+    update Task set { description: $description } where slug = $slug
+}
+
+// ── Status transitions ───────────────────────────────
+
+query start_review($slug: String) {
+    update Task set { status: "review" } where slug = $slug
+}
+
+query approve_task($slug: String) {
+    update Task set { status: "approved" } where slug = $slug
+}
+
+query reject_task($slug: String) {
+    update Task set { status: "rejected" } where slug = $slug
+}
+
+// ── Edge + node inserts ──────────────────────────────
+
+query assign_task($task: String, $reviewer: String) {
+    insert AssignedTo { from: $task, to: $reviewer }
+}
+
+query add_comment($slug: String, $text: String) {
+    insert Comment { slug: $slug, text: $text }
+}
+
+query link_comment($comment: String, $task: String) {
+    insert CommentedOn { from: $comment, to: $task }
+}

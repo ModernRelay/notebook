@@ -45,6 +45,7 @@ export function heightToRows(height: Cell["height"]): number | undefined {
 export function lensDefaultRows(lens: Cell["lens"]): number {
   switch (lens) {
     case "Table":
+    case "Form":
       return HEIGHT_ROWS.tall;
     case "Text":
     case "Path":

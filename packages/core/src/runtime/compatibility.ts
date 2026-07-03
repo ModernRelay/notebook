@@ -1,6 +1,6 @@
 import type { Notebook } from "../spec/index.js";
 import type { SourceCapabilities } from "./types.js";
-import { actionListMutations } from "./mutations.js";
+import { cellMutations } from "./mutations.js";
 
 interface CompatibilityResult {
   errors: string[];
@@ -47,7 +47,7 @@ export function validateNotebookCompatibility(
 
     // Mutations mirror the read gate: `ref` needs named-query support; `rawGq`
     // is the capability-gated escape hatch (off by default).
-    for (const mutation of actionListMutations(cell)) {
+    for (const mutation of cellMutations(cell)) {
       if (mutation.ref !== undefined && !capabilities.namedQueries) {
         errors.push(
           `${cell.id}: selected source does not support named catalog mutations (mutation.ref)`,

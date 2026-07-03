@@ -95,7 +95,7 @@ export class ServerSource implements Source {
     // Canonical path: a server-owned catalog mutation invoked by name. The
     // mutation query owns its `where` clause, so identity is never built here.
     if (spec.ref !== undefined) {
-      await this.client.invokeMutation(
+      const result: ChangeOutput = await this.client.invokeMutation(
         spec.ref,
         {
           ...(Object.keys(params).length > 0 && { params }),
@@ -103,7 +103,10 @@ export class ServerSource implements Source {
         },
         context.signal,
       );
-      return { kind: "ok" };
+      return {
+        kind: "ok",
+        affected: { nodes: result.affected_nodes, edges: result.affected_edges },
+      };
     }
 
     // Escape hatch: author-written inline `.gq` sent ad-hoc via /mutate.
@@ -117,8 +120,10 @@ export class ServerSource implements Source {
         },
         context.signal,
       );
-      void result;
-      return { kind: "ok" };
+      return {
+        kind: "ok",
+        affected: { nodes: result.affected_nodes, edges: result.affected_edges },
+      };
     }
 
     throw new Error(

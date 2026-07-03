@@ -178,6 +178,13 @@ export function App({
           </Box>
         )}
 
+        {snapshot.mutationError === null &&
+          snapshot.mutationFeedback !== null && (
+            <Box marginTop={1}>
+              <Text color="green">✓ {snapshot.mutationFeedback.message}</Text>
+            </Box>
+          )}
+
         <ApprovalsFooter state={snapshot.state} />
 
         {/* Footer: nav keys */}

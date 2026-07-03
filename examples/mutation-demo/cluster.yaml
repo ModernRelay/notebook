@@ -1,0 +1,15 @@
+# Cluster declaration (infrastructure-as-code) for the mutation-demo graph.
+# RustFS (S3) backed — the only difference from a filesystem cluster is the
+# `storage:` line. No embedding provider: the schema has no Vector fields.
+#
+# Validate:  omnigraph cluster validate --config .
+# Bootstrap: scripts/server-demo-s3.sh   (validate → import → apply → load)
+version: 1
+metadata:
+  name: mutation-demo
+storage: s3://omnigraph-local/clusters/mutation-demo
+
+graphs:
+  tasks:
+    schema: schema.pg
+    queries: queries

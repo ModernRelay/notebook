@@ -1,0 +1,86 @@
+// Read queries — feed the notebook lenses.
+// Registered into the cluster via cluster.yaml (graphs.tasks.queries: queries).
+// Served at POST /graphs/tasks/queries/{name}. The @key field is `slug`
+// (`id` is reserved by the storage layer); columns are aliased to bare names.
+
+query all_tasks() {
+    match { $t: Task }
+    return {
+        $t.slug as slug,
+        $t.title as title,
+        $t.status as status,
+        $t.priority as priority,
+        $t.estimatedDays as days
+    }
+    order { $t.slug }
+}
+
+query tasks_by_status($status: String) {
+    match { $t: Task { status: $status } }
+    return {
+        $t.slug as slug,
+        $t.title as title,
+        $t.status as status,
+        $t.priority as priority,
+        $t.estimatedDays as days
+    }
+    order { $t.slug }
+}
+
+query tasks_in_review() {
+    match { $t: Task { status: "review" } }
+    return {
+        $t.slug as slug,
+        $t.title as title,
+        $t.status as status,
+        $t.priority as priority
+    }
+    order { $t.slug }
+}
+
+query get_task($slug: String) {
+    match { $t: Task { slug: $slug } }
+    return {
+        $t.slug as slug,
+        $t.title as title,
+        $t.description as description,
+        $t.status as status,
+        $t.priority as priority,
+        $t.estimatedDays as days
+    }
+}
+
+query all_reviewers() {
+    match { $r: Reviewer }
+    return {
+        $r.slug as slug,
+        $r.name as name,
+        $r.team as team
+    }
+    order { $r.name }
+}
+
+// Task -> Reviewer (who's assigned to the selected task)
+query task_assignees($slug: String) {
+    match {
+        $t: Task { slug: $slug }
+        $t assignedTo $r
+    }
+    return {
+        $r.slug as slug,
+        $r.name as name,
+        $r.team as team
+    }
+}
+
+// Comment -> Task (comments on the selected task)
+query task_comments($slug: String) {
+    match {
+        $t: Task { slug: $slug }
+        $c commentedOn $t
+    }
+    return {
+        $c.slug as slug,
+        $c.text as text
+    }
+}

@@ -1,5 +1,6 @@
-import type { Cell, MutationSpec } from "../spec/index.js";
+import type { Cell, MutationSpec, Notebook } from "../spec/index.js";
 import { MutationSpecSchema } from "../spec/index.js";
+import { dataCellIds, isControl } from "./controls.js";
 
 export interface OptimisticPatch {
   key: string;
@@ -21,16 +22,34 @@ export interface OptimisticPatch {
   seq: number;
 }
 
-export function actionListMutations(cell: Cell): MutationSpec[] {
-  const actions = Array.isArray(cell.props.actions) ? cell.props.actions : [];
+/**
+ * Every mutation a cell can fire, wherever it's declared: ActionList
+ * `props.actions[*].mutation`, Form `props.fields[*].mutation` and its
+ * form-level `props.mutations[*]`, a mutation Button's `props.mutation`,
+ * and the same shapes inside inline `cell.controls[*].props`.
+ */
+export function cellMutations(cell: Cell): MutationSpec[] {
   const out: MutationSpec[] = [];
-  for (const action of actions) {
-    if (!action || typeof action !== "object") continue;
-    const mutation = (action as Record<string, unknown>).mutation;
-    if (!mutation || typeof mutation !== "object") continue;
-    const parsed = MutationSpecSchema.safeParse(mutation);
+  const collectSpec = (spec: unknown): void => {
+    if (!spec || typeof spec !== "object") return;
+    const parsed = MutationSpecSchema.safeParse(spec);
     if (parsed.success) out.push(parsed.data);
-  }
+  };
+  const collect = (candidate: unknown): void => {
+    if (!candidate || typeof candidate !== "object") return;
+    collectSpec((candidate as Record<string, unknown>).mutation);
+  };
+  const collectProps = (props: Record<string, unknown>): void => {
+    const actions = Array.isArray(props.actions) ? props.actions : [];
+    for (const action of actions) collect(action);
+    const fields = Array.isArray(props.fields) ? props.fields : [];
+    for (const field of fields) collect(field);
+    const formLevel = Array.isArray(props.mutations) ? props.mutations : [];
+    for (const spec of formLevel) collectSpec(spec); // Form: props.mutations[*]
+    collect(props); // Button: props.mutation
+  };
+  collectProps(cell.props);
+  for (const control of cell.controls ?? []) collectProps(control.props);
   return out;
 }
 
@@ -61,4 +80,38 @@ export function patchesFromMutation(
 
 export function patchKey(cellId: string, rowKey: string, field: string): string {
   return `${cellId}:${rowKey}:${field}`;
+}
+
+/**
+ * Which cells a successful dispatch must re-read. Config-declared: each
+ * mutation may list the catalog READ-query refs it stales (`invalidates`);
+ * matching cells re-read, plus the originating cell. Conservative fallback:
+ * if ANY dispatched mutation omits `invalidates`, re-read every data cell
+ * (today's behavior — nothing silently goes stale). `invalidates: []` means
+ * "only the originating cell".
+ */
+export function invalidationTargets(
+  specs: readonly MutationSpec[],
+  notebook: Notebook,
+  originCellId?: string,
+): Set<string> {
+  if (specs.length === 0 || specs.some((s) => s.invalidates === undefined)) {
+    return new Set(dataCellIds(notebook));
+  }
+  const refs = new Set(specs.flatMap((s) => s.invalidates ?? []));
+  const out = new Set<string>();
+  for (const cell of notebook.cells) {
+    if (
+      !isControl(cell) &&
+      cell.query?.ref !== undefined &&
+      refs.has(cell.query.ref)
+    ) {
+      out.add(cell.id);
+    }
+  }
+  if (originCellId !== undefined) {
+    const origin = notebook.cells.find((c) => c.id === originCellId);
+    if (origin !== undefined && !isControl(origin)) out.add(originCellId);
+  }
+  return out;
 }

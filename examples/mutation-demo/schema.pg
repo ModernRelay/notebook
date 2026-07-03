@@ -1,0 +1,34 @@
+// Mutation-demo schema — a compact task-review queue, purpose-built to exercise
+// every notebook mutation primitive (field edits, status transitions, edge
+// inserts, node inserts) against a RustFS (S3) backed cluster.
+// Bootstrap/load via scripts/server-demo-s3.sh.
+
+// ── Nodes ────────────────────────────────────────────
+
+node Task {
+    slug: String @key
+    title: String @index
+    description: String?
+    priority: enum(low, medium, high, urgent)
+    status: enum(draft, review, approved, rejected)
+    estimatedDays: I32?
+    createdAt: Date?
+}
+
+node Reviewer {
+    slug: String @key
+    name: String @index
+    team: enum(backend, frontend, security)?
+}
+
+node Comment {
+    slug: String @key
+    text: String @index
+}
+
+// ── Edges ────────────────────────────────────────────
+// PascalCase per the .pg grammar; queried camelCase (e.g. `$t assignedTo $r`).
+
+edge AssignedTo:  Task    -> Reviewer
+edge CommentedOn: Comment -> Task
+edge CommentedBy: Comment -> Reviewer

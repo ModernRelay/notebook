@@ -13,6 +13,9 @@ import { Text } from "./components/Text.js";
 import { Button } from "./components/Button.js";
 import { Toggle } from "./components/Toggle.js";
 import { Select } from "./components/Select.js";
+import { TextInput } from "./components/TextInput.js";
+import { NumberInput } from "./components/NumberInput.js";
+import { Form } from "./components/Form.js";
 
 const catalog = defineCatalog(schema, {
   components: lensComponents,
@@ -22,7 +25,7 @@ const catalog = defineCatalog(schema, {
 // React's SetState is `(updater: (prev) => next) => void`. We use the
 // executor's setAtPointer helper to write at JSON-pointer paths immutably.
 const { registry: webRegistry } = defineRegistry(catalog, {
-  components: { Table, Path, Subgraph, ActionList, Timeline, Card, Quote, Text, Button, Toggle, Select },
+  components: { Table, Path, Subgraph, ActionList, Form, Timeline, Card, Quote, Text, Button, Toggle, Select, TextInput, NumberInput },
   actions: {
     setState: async (params, setState) => {
       const { statePath, value } = params as {

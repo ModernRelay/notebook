@@ -122,6 +122,8 @@
 }
 
 .dark {
+  /* Make the UA paint scrollbars (and native form controls) dark to match. */
+  color-scheme: dark;
   --accent: --alpha(var(--color-white) / 4%);
   --accent-foreground: var(--color-neutral-100);
   --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));

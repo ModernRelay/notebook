@@ -124,6 +124,11 @@ export function ActionList({
                   {meta.join(" · ")}
                 </p>
               )}
+              {mutationState?.error !== undefined && !saving && (
+                <p className="mt-1 text-xs text-warning" role="alert">
+                  ⚠ {mutationState.error}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 gap-2">
               {p.actions.map((act, aIdx) => {

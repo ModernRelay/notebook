@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 
-/** Data-bearing lenses (cells with a query). */
+/** Data-bearing lenses (cells with a query; Form's query is optional — prefill). */
 export const LensKind = z.enum([
   "Table",
   "Subgraph",
@@ -11,11 +11,18 @@ export const LensKind = z.enum([
   "Card",
   "Quote",
   "Text",
+  "Form",
 ]);
 export type LensKind = z.infer<typeof LensKind>;
 
 /** Interactive controls (cells without a query). */
-export const ControlKind = z.enum(["Button", "Toggle", "Select"]);
+export const ControlKind = z.enum([
+  "Button",
+  "Toggle",
+  "Select",
+  "TextInput",
+  "NumberInput",
+]);
 export type ControlKind = z.infer<typeof ControlKind>;
 
 /** Any cell type. */
@@ -28,9 +35,12 @@ export const ComponentKind = z.enum([
   "Card",
   "Quote",
   "Text",
+  "Form",
   "Button",
   "Toggle",
   "Select",
+  "TextInput",
+  "NumberInput",
 ]);
 export type ComponentKind = z.infer<typeof ComponentKind>;
 
@@ -67,10 +77,19 @@ export const MutationSpecSchema = z
     name: z.string().optional(),
     /**
      * Typed params for the mutation. Each value is a literal, a clicked-row
-     * column ref `{ $row: "<col>" }`, or a state ref `{ $state: "/ptr" }`.
+     * column ref `{ $row: "<col>" }`, a state ref `{ $state: "/ptr" }`, or —
+     * inside a Form field — a submitted-value ref `{ $input: "<field>" }`.
      */
     params: z.record(z.string(), z.unknown()).optional(),
     optimistic: OptimisticSpecSchema.optional(),
+    /**
+     * Catalog READ-query refs whose cells this mutation stales. After a
+     * successful dispatch the runtime re-reads ONLY cells whose `query.ref`
+     * is in the union of the dispatched mutations' `invalidates` (plus the
+     * originating cell). Absent ⇒ conservative re-read of every data cell.
+     * `[]` ⇒ originating cell only.
+     */
+    invalidates: z.array(z.string().min(1)).optional(),
   })
   .strict()
   .refine(
@@ -80,20 +99,53 @@ export const MutationSpecSchema = z
 export type MutationSpec = z.infer<typeof MutationSpecSchema>;
 
 /**
- * What the `mutate` action handler receives. The lens supplies the clicked
- * `row` (source of `$row` params + the optimistic overlay base) and `rowKey`
- * (the row's `id_column` value — the optimistic overlay key, NOT a graph id).
+ * What the `mutate` action handler receives. An ActionList row button supplies
+ * the clicked `row` (source of `$row` params + the optimistic overlay base) and
+ * `rowKey` (the row's `id_column` value — the overlay key, NOT a graph id). A
+ * non-row trigger (a `Button` with a `mutation`) passes only `spec`; its params
+ * resolve from `$state`/literal, and there is no per-row optimistic overlay.
  */
 export const MutationParamsSchema = z.object({
   spec: MutationSpecSchema,
-  row: z.record(z.string(), z.unknown()),
-  rowKey: z.string().min(1),
+  row: z.record(z.string(), z.unknown()).optional(),
+  rowKey: z.string().min(1).optional(),
 });
 export type MutationParams = z.infer<typeof MutationParamsSchema>;
 
-/** Reserved for richer reporting later (rows-affected, version, etc). */
+/**
+ * A Form submit: the dirty fields' mutations, dispatched by the runtime
+ * sequentially as independent server commits (there is no server-side batch
+ * transaction) with one saving flag and ONE final re-read. `input` is the
+ * full submitted field-value map — `{ $input: "<field>" }` params resolve
+ * against it, so a field's mutation may also reference sibling fields.
+ * `row` is the prefill row being edited — `{ $row: "<col>" }` identity
+ * params resolve against it at dispatch (renderer prop resolution passes
+ * `$row`/`$input` through untouched, unlike `{ $state }`, which resolves at
+ * render time and silently drops a `default`).
+ */
+export const MutationBatchParamsSchema = z.object({
+  mutations: z.array(z.object({ spec: MutationSpecSchema }).strict()).min(1),
+  input: z.record(z.string(), z.unknown()),
+  row: z.record(z.string(), z.unknown()).optional(),
+});
+export type MutationBatchParams = z.infer<typeof MutationBatchParamsSchema>;
+
+/** What the `mutate` action accepts: one mutation, or a Form's dirty batch. */
+export const MutationDispatchSchema = z.union([
+  MutationParamsSchema,
+  MutationBatchParamsSchema,
+]);
+export type MutationDispatch = z.infer<typeof MutationDispatchSchema>;
+
+/** What a successful mutation reports back. */
 export interface MutationResult {
   kind: "ok";
+  /**
+   * Rows the server reports as touched (ChangeOutput.affected_nodes/_edges).
+   * Absent ⇒ the source can't count: no-op detection is skipped and the
+   * success feedback says just "Saved".
+   */
+  affected?: { nodes: number; edges: number };
 }
 
 // ── Cell + Notebook ───────────────────────────────────────────────────────
@@ -152,7 +204,8 @@ export const CellSchema = z
     id: z.string().min(1),
     lens: ComponentKind,
     /**
-     * Required for data lenses (Table/Path/Subgraph/ActionList), absent
+     * Required for data lenses (Table/Path/Subgraph/ActionList), optional
+     * on Form (query → edit-form prefill; none → blank create-form), absent
      * for top-level control cells (Button/Toggle/Select). Validated by
      * the refinement below.
      */
@@ -213,13 +266,18 @@ export const CellSchema = z
   .strict()
   .refine(
     (c) => {
-      const isControl =
-        c.lens === "Button" || c.lens === "Toggle" || c.lens === "Select";
-      return isControl ? c.query === undefined : c.query !== undefined;
+      const isControl = (ControlKind.options as readonly string[]).includes(
+        c.lens,
+      );
+      if (isControl) return c.query === undefined;
+      // A Form's query is optional: present → edit-form prefilled from the
+      // first result row; absent → blank create-form.
+      if (c.lens === "Form") return true;
+      return c.query !== undefined;
     },
     {
       message:
-        "data cells (Table/Path/Subgraph/ActionList) require a `query`; control cells (Button/Toggle/Select) must not have one",
+        "data cells (Table/Path/Subgraph/ActionList/…) require a `query` (optional on Form); control cells (Button/Toggle/Select/TextInput/NumberInput) must not have one",
     },
   );
 export type Cell = z.infer<typeof CellSchema>;

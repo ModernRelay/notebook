@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { Notebook } from "../spec/index.js";
 import {
   createNotebookRuntime,
+  invalidationTargets,
   notebookStateParams,
   readStatePointer,
   type ExecutionContext,
@@ -527,6 +528,64 @@ describe("createNotebookRuntime", () => {
     runtime.dispose();
   });
 
+  it("dispatches a non-row Button mutation: resolves $state params, no row, toggles saving", async () => {
+    let seen: MutationCommand | null = null;
+    let release: (() => void) | undefined;
+    const inflight = new Promise<void>((r) => {
+      release = r;
+    });
+    const source = fakeSource({
+      read: async () => ({
+        query_name: "q",
+        target: "t",
+        row_count: 0,
+        columns: [],
+        rows: [],
+      }),
+      mutate: async (command) => {
+        seen = command;
+        await inflight;
+        return { kind: "ok" };
+      },
+    });
+    const mutation = {
+      ref: "set_definition",
+      params: { slug: { $state: "/sel" }, definition: { $state: "/newdef" } },
+    };
+    const notebook: Notebook = {
+      version: 1,
+      title: "Edit",
+      cells: [{ id: "save", lens: "Button", props: { label: "Save", mutation } }],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    runtime.applyStateChanges([
+      { path: "/sel", value: "abm" },
+      { path: "/newdef", value: "New def" },
+    ]);
+
+    const savingOf = (): unknown => {
+      const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "save");
+      const el = exec?.spec?.elements?.["save"] as
+        | { props?: { runtime?: { saving?: boolean } } }
+        | undefined;
+      return el?.props?.runtime?.saving;
+    };
+
+    const done = runtime.dispatch("mutate", {
+      params: { spec: mutation, __cell_id: "save" },
+    });
+    expect(savingOf()).toBe(true); // in flight
+    release?.();
+    await done;
+    expect(savingOf()).toBe(false); // settled
+    const cmd = seen as MutationCommand | null;
+    expect(cmd?.resolvedParams).toEqual({ slug: "abm", definition: "New def" });
+    expect(cmd?.params.row).toBeUndefined();
+    expect(cmd?.params.rowKey).toBeUndefined();
+    runtime.dispose();
+  });
+
   it("passes branch-originated mutations back to the read branch", async () => {
     let seen: MutationContext | null = null;
     const source = fakeSource({
@@ -787,3 +846,630 @@ function actionListNotebook(target: {
     ],
   };
 }
+
+// ── Form: batch dispatch + $input ───────────────────────────────────────────
+
+function formNotebook(withQuery: boolean): Notebook {
+  const fieldMutation = (ref: string, param: string) => ({
+    ref,
+    params: { slug: { $state: "/sel" }, [param]: { $input: param } },
+  });
+  return {
+    version: 1,
+    title: "Form",
+    cells: [
+      {
+        id: "form",
+        lens: "Form",
+        ...(withQuery
+          ? { query: { ref: "get_task", params: { slug: { $state: "/sel" } } } }
+          : {}),
+        props: {
+          key_column: withQuery ? "slug" : undefined,
+          fields: [
+            { name: "title", kind: "text", mutation: fieldMutation("set_title", "title") },
+            {
+              name: "days",
+              kind: "number",
+              mutation: {
+                ref: "set_days",
+                params: { slug: { $row: "slug" }, days: { $input: "days" } },
+              },
+            },
+            { name: "priority", kind: "select", options: ["low", "high"], mutation: fieldMutation("set_priority", "priority") },
+          ],
+        },
+      },
+      {
+        id: "list",
+        lens: "Table",
+        query: { ref: "all" },
+        props: { columns: [{ key: "x", label: "X" }] },
+      },
+    ],
+  } as unknown as Notebook;
+}
+
+describe("Form batch dispatch", () => {
+  const formRuntimeProps = (
+    runtime: ReturnType<typeof createNotebookRuntime>,
+  ): { saving?: boolean; error?: string } | undefined => {
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+    const el = exec?.spec?.elements?.["form"] as
+      | { props?: { runtime?: { saving?: boolean; error?: string } } }
+      | undefined;
+    return el?.props?.runtime;
+  };
+
+  it("dispatches dirty entries sequentially with $input params, one saving flag, ONE final re-read", async () => {
+    const seen: MutationCommand[] = [];
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const source = fakeSource({
+      mutate: async (command) => {
+        seen.push(command);
+        if (seen.length === 1) await gate;
+        return { kind: "ok" };
+      },
+    });
+    const notebook = formNotebook(true);
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    runtime.applyStateChanges([{ path: "/sel", value: "t3" }]);
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsBefore = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    const fields = (notebook.cells[0]!.props as {
+      fields: { mutation: unknown }[];
+    }).fields;
+    const done = runtime.dispatch("mutate", {
+      params: {
+        mutations: [{ spec: fields[0]!.mutation }, { spec: fields[1]!.mutation }],
+        input: { title: "New title", days: 7, priority: "low" },
+        row: { slug: "t3-from-row" },
+        __cell_id: "form",
+      },
+    });
+    await waitFor(runtime, () => formRuntimeProps(runtime)?.saving === true);
+    release?.();
+    await done;
+
+    expect(formRuntimeProps(runtime)?.saving).toBe(false);
+    expect(formRuntimeProps(runtime)?.error).toBeUndefined();
+    expect(seen.map((c) => c.params.spec.ref)).toEqual(["set_title", "set_days"]);
+    expect(seen[0]?.resolvedParams).toEqual({ slug: "t3", title: "New title" });
+    expect(seen[1]?.resolvedParams).toEqual({ slug: "t3-from-row", days: 7 });
+    // ONE re-read wave for the whole batch: both data cells, once each.
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsAfter = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(readsAfter - readsBefore).toBe(2);
+    expect(runtime.getSnapshot().mutationError).toBeNull();
+    runtime.dispose();
+  });
+
+  it("stops at the first failure, reports (n/m fields saved), still re-reads for the committed part", async () => {
+    let calls = 0;
+    const source = fakeSource({
+      mutate: async () => {
+        calls += 1;
+        if (calls === 2) throw new Error("boom");
+        return { kind: "ok" };
+      },
+    });
+    const notebook = formNotebook(true);
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsBefore = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    const fields = (notebook.cells[0]!.props as {
+      fields: { mutation: unknown }[];
+    }).fields;
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: fields.map((f) => ({ spec: f.mutation })),
+        input: { title: "T", days: 1, priority: "low" },
+        __cell_id: "form",
+      },
+    });
+
+    expect(calls).toBe(2); // third entry never dispatched
+    expect(runtime.getSnapshot().mutationError).toMatch(/set_days: boom \(1\/3 fields saved\)/);
+    expect(formRuntimeProps(runtime)?.saving).toBe(false);
+    expect(formRuntimeProps(runtime)?.error).toMatch(/1\/3 fields saved/);
+    // One entry committed → the re-read still runs.
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsAfter = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(readsAfter - readsBefore).toBe(2);
+    runtime.dispose();
+  });
+
+  it("skips the re-read entirely when nothing committed", async () => {
+    const source = fakeSource({
+      mutate: async () => {
+        throw new Error("down");
+      },
+    });
+    const notebook = formNotebook(true);
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsBefore = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    const fields = (notebook.cells[0]!.props as {
+      fields: { mutation: unknown }[];
+    }).fields;
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: [{ spec: fields[0]!.mutation }],
+        input: { title: "T" },
+        __cell_id: "form",
+      },
+    });
+
+    expect(runtime.getSnapshot().mutationError).toMatch(/set_title: down/);
+    expect(runtime.getSnapshot().mutationError).not.toMatch(/fields saved/);
+    const readsAfter = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(readsAfter).toBe(readsBefore);
+    runtime.dispose();
+  });
+
+  it("runs a query-less Form as a blank create-form (no read, empty rows, no error)", async () => {
+    const source = fakeSource({});
+    const runtime = createNotebookRuntime({
+      notebook: formNotebook(false),
+      source,
+    });
+    const snapshot = await waitFor(runtime, (s) => s.status === "ready");
+    const exec = snapshot.cells.find((c) => c.cell.id === "form");
+    expect(exec?.error).toBeNull();
+    const el = exec?.spec?.elements?.["form"] as
+      | { props?: { rows?: unknown[] } }
+      | undefined;
+    expect(el?.props?.rows).toEqual([]);
+    // Only the Table cell read; the Form never touched the source.
+    const readCells = (source.read as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => (call[0] as ReadRequest).cellId,
+    );
+    expect(readCells).not.toContain("form");
+    runtime.dispose();
+  });
+});
+
+// ── P3: result feedback, no-op detection, targeted re-read ─────────────────
+
+describe("mutation result feedback + no-op + targeted re-read", () => {
+  const okResult = (nodes: number, edges = 0) =>
+    ({ kind: "ok", affected: { nodes, edges } }) as const;
+
+  function feedbackNotebook(invalidates?: string[]): Notebook {
+    return {
+      version: 1,
+      title: "P3",
+      cells: [
+        {
+          id: "queue",
+          lens: "ActionList",
+          query: { ref: "in_review" },
+          props: {
+            id_column: "id",
+            title_column: "title",
+            status_field: "status",
+            actions: [
+              {
+                label: "Approve",
+                mutation: {
+                  ref: "approve",
+                  params: { slug: { $row: "id" } },
+                  optimistic: { set: { status: "approved" } },
+                  ...(invalidates !== undefined ? { invalidates } : {}),
+                },
+              },
+            ],
+          },
+        },
+        {
+          id: "list",
+          lens: "Table",
+          query: { ref: "all_items" },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+        {
+          id: "other",
+          lens: "Table",
+          query: { ref: "unrelated" },
+          props: { columns: [{ key: "x", label: "X" }] },
+        },
+      ],
+    } as unknown as Notebook;
+  }
+
+  const approve = (runtime: ReturnType<typeof createNotebookRuntime>) =>
+    runtime.dispatch("mutate", {
+      params: {
+        spec: {
+          ref: "approve",
+          params: { slug: { $row: "id" } },
+          optimistic: { set: { status: "approved" } },
+        },
+        row: { id: "r1" },
+        rowKey: "r1",
+        __cell_id: "queue",
+      },
+    });
+
+  const rowState = (
+    runtime: ReturnType<typeof createNotebookRuntime>,
+    rowKey: string,
+  ): { saving?: boolean; error?: string } | undefined => {
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "queue");
+    const el = exec?.spec?.elements?.["queue"] as
+      | {
+          props?: {
+            runtime?: {
+              mutation_state?: Record<string, { saving?: boolean; error?: string }>;
+            };
+          };
+        }
+      | undefined;
+    return el?.props?.runtime?.mutation_state?.[rowKey];
+  };
+
+  it("success sets mutationFeedback with rows-affected; 'Saved' when the source can't count", async () => {
+    const source = fakeSource({ mutate: async () => okResult(3, 1) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook(),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await approve(runtime);
+    expect(runtime.getSnapshot().mutationFeedback).toMatchObject({
+      kind: "success",
+      message: "Saved — 4 rows",
+      cellId: "queue",
+    });
+
+    const uncounted = fakeSource({ mutate: async () => ({ kind: "ok" }) });
+    const runtime2 = createNotebookRuntime({
+      notebook: feedbackNotebook(),
+      source: uncounted,
+    });
+    await waitFor(runtime2, (s) => s.status === "ready");
+    await approve(runtime2);
+    expect(runtime2.getSnapshot().mutationFeedback?.message).toBe("Saved");
+    runtime.dispose();
+    runtime2.dispose();
+  });
+
+  it("no-op (0 affected): overlay rolled back, row warning parked, no feedback, no re-read", async () => {
+    const source = fakeSource({ mutate: async () => okResult(0) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook(),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const readsBefore = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+    await approve(runtime);
+
+    expect(rowState(runtime, "r1")?.error).toMatch(/matched no rows/);
+    expect(rowState(runtime, "r1")?.saving).toBe(false);
+    expect(runtime.getSnapshot().mutationFeedback).toBeNull();
+    expect(runtime.getSnapshot().mutationError).toBeNull();
+    const readsAfter = (source.read as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(readsAfter).toBe(readsBefore); // nothing changed server-side
+    runtime.dispose();
+  });
+
+  it("row no-op warning survives an unrelated re-read and clears on re-dispatch", async () => {
+    let affected = 0;
+    const source = fakeSource({ mutate: async () => okResult(affected) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook(),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await approve(runtime);
+    expect(rowState(runtime, "r1")?.error).toMatch(/matched no rows/);
+
+    // An unrelated state-driven change doesn't clear the parked warning.
+    runtime.applyStateChanges([{ path: "/x", value: 1 }]);
+    expect(rowState(runtime, "r1")?.error).toMatch(/matched no rows/);
+
+    // Re-dispatching the same row clears it (and this time it succeeds).
+    affected = 1;
+    await approve(runtime);
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(rowState(runtime, "r1")?.error).toBeUndefined();
+    runtime.dispose();
+  });
+
+  it("Button no-op parks the warning on the cell's runtime props", async () => {
+    const source = fakeSource({ mutate: async () => okResult(0) });
+    const notebook: Notebook = {
+      version: 1,
+      title: "Btn",
+      cells: [
+        {
+          id: "save",
+          lens: "Button",
+          props: { label: "Go", mutation: { ref: "m", params: {} } },
+        },
+      ],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: { spec: { ref: "m", params: {} }, __cell_id: "save" },
+    });
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "save");
+    const el = exec?.spec?.elements?.["save"] as
+      | { props?: { runtime?: { saving?: boolean; error?: string } } }
+      | undefined;
+    expect(el?.props?.runtime?.error).toMatch(/matched no rows/);
+    expect(el?.props?.runtime?.saving).toBe(false);
+    runtime.dispose();
+  });
+
+  it("no-op with no originating cell falls back to the global mutationError", async () => {
+    const source = fakeSource({ mutate: async () => okResult(0) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook(),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: { spec: { ref: "m", params: {} } },
+    });
+    expect(runtime.getSnapshot().mutationError).toMatch(/matched no rows/);
+    runtime.dispose();
+  });
+
+  it("targeted re-read: invalidates=[all_items] re-reads matching cells + origin only", async () => {
+    const source = fakeSource({ mutate: async () => okResult(1) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook(["all_items"]),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    read.mockClear();
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: {
+          ref: "approve",
+          params: { slug: { $row: "id" } },
+          invalidates: ["all_items"],
+        },
+        row: { id: "r1" },
+        rowKey: "r1",
+        __cell_id: "queue",
+      },
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const cellsRead = read.mock.calls.map((c) => (c[0] as ReadRequest).cellId).sort();
+    expect(cellsRead).toEqual(["list", "queue"]); // origin + matching ref; NOT "other"
+    runtime.dispose();
+  });
+
+  it("targeted re-read: invalidates=[] re-reads the origin only; absent re-reads all", async () => {
+    const source = fakeSource({ mutate: async () => okResult(1) });
+    const runtime = createNotebookRuntime({
+      notebook: feedbackNotebook([]),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    read.mockClear();
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: { ref: "approve", params: {}, invalidates: [] },
+        row: { id: "r1" },
+        rowKey: "r1",
+        __cell_id: "queue",
+      },
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(read.mock.calls.map((c) => (c[0] as ReadRequest).cellId)).toEqual(["queue"]);
+
+    read.mockClear();
+    await approve(runtime); // spec without invalidates → conservative all
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(read.mock.calls.map((c) => (c[0] as ReadRequest).cellId).sort()).toEqual([
+      "list",
+      "other",
+      "queue",
+    ]);
+    runtime.dispose();
+  });
+
+  it("batch: no-op entry stops the batch, reports '(n/m fields saved)', still re-reads the committed part", async () => {
+    let call = 0;
+    const source = fakeSource({
+      mutate: async () => {
+        call += 1;
+        return call === 2 ? okResult(0) : okResult(1);
+      },
+    });
+    const notebook = formNotebook(true);
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    read.mockClear();
+
+    const fields = (notebook.cells[0]!.props as { fields: { mutation: unknown }[] }).fields;
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: fields.map((f) => ({ spec: f.mutation })),
+        input: { title: "T", days: 1, priority: "low" },
+        row: { slug: "t1" },
+        __cell_id: "form",
+      },
+    });
+    expect(call).toBe(2); // third never dispatched
+    expect(runtime.getSnapshot().mutationError).toMatch(
+      /matched no rows — nothing was updated \(1\/3 fields saved\)/,
+    );
+    expect(runtime.getSnapshot().mutationFeedback).toBeNull();
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(read.mock.calls.length).toBeGreaterThan(0); // committed part re-read
+    runtime.dispose();
+  });
+
+  it("batch success sets fields+rows feedback and re-reads the invalidates union", async () => {
+    const source = fakeSource({ mutate: async () => okResult(1) });
+    const notebook = feedbackNotebook();
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    read.mockClear();
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: [
+          { spec: { ref: "a", params: {}, invalidates: ["all_items"] } },
+          { spec: { ref: "b", params: {}, invalidates: ["unrelated"] } },
+        ],
+        input: {},
+        __cell_id: "queue",
+      },
+    });
+    expect(runtime.getSnapshot().mutationFeedback?.message).toBe(
+      "Saved — 2 fields, 2 rows",
+    );
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(read.mock.calls.map((c) => (c[0] as ReadRequest).cellId).sort()).toEqual([
+      "list",
+      "other",
+      "queue",
+    ]); // union of both + origin
+    runtime.dispose();
+  });
+});
+
+describe("invalidationTargets", () => {
+  const nb = (): Notebook =>
+    ({
+      version: 1,
+      title: "t",
+      cells: [
+        { id: "a", lens: "Table", query: { ref: "qa" }, props: { columns: [{ key: "x", label: "X" }] } },
+        { id: "b", lens: "Table", query: { ref: "qb" }, props: { columns: [{ key: "x", label: "X" }] } },
+        { id: "btn", lens: "Button", props: { label: "B" } },
+      ],
+    }) as unknown as Notebook;
+
+  it("matches cells by ref, adds a data-cell origin, dedupes", () => {
+    const t = invalidationTargets(
+      [{ ref: "m", invalidates: ["qa", "qa", "bogus"] }],
+      nb(),
+      "b",
+    );
+    expect([...t].sort()).toEqual(["a", "b"]);
+  });
+
+  it("excludes a control origin", () => {
+    const t = invalidationTargets([{ ref: "m", invalidates: [] }], nb(), "btn");
+    expect(t.size).toBe(0);
+  });
+
+  it("any spec missing invalidates → all data cells", () => {
+    const t = invalidationTargets(
+      [{ ref: "m", invalidates: ["qa"] }, { ref: "n" }],
+      nb(),
+    );
+    expect([...t].sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("batch partial-failure retry (no double-commit)", () => {
+  const CREATE_NB: Notebook = {
+    version: 1,
+    title: "Create",
+    cells: [
+      {
+        id: "form",
+        lens: "Form",
+        props: {
+          fields: [
+            { name: "slug", kind: "text" },
+            { name: "text", kind: "textarea" },
+          ],
+          mutations: [
+            { ref: "add_comment", params: { slug: { $input: "slug" }, text: { $input: "text" } } },
+            { ref: "link_comment", params: { comment: { $input: "slug" }, task: "t1" } },
+          ],
+        },
+      },
+    ],
+  } as unknown as Notebook;
+
+  const batchParams = (input: Record<string, unknown>) => ({
+    mutations: (CREATE_NB.cells[0]!.props as { mutations: unknown[] }).mutations.map(
+      (spec) => ({ spec }),
+    ),
+    input,
+    __cell_id: "form",
+  });
+
+  it("a committed entry is skipped on retry — even across repeated failures", async () => {
+    const calls: string[] = [];
+    let linkFailures = 2;
+    const source = fakeSource({
+      mutate: async (command) => {
+        const ref = command.params.spec.ref ?? "?";
+        calls.push(ref);
+        if (ref === "link_comment" && linkFailures > 0) {
+          linkFailures -= 1;
+          throw new Error("no task selected");
+        }
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: CREATE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    // Round 1: add commits, link fails → parked with "(1/2 fields saved)".
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    expect(runtime.getSnapshot().mutationError).toMatch(/link_comment.*\(1\/2 fields saved\)/);
+
+    // Round 2: add is SKIPPED (already committed), link fails again.
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    // Round 3: add still skipped, link finally succeeds.
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+
+    expect(calls).toEqual(["add_comment", "link_comment", "link_comment", "link_comment"]);
+    expect(runtime.getSnapshot().mutationError).toBeNull();
+    expect(runtime.getSnapshot().mutationFeedback?.message).toBe("Saved — 1 field, 1 row");
+    runtime.dispose();
+  });
+
+  it("edited input re-fires the entry (resolved params differ)", async () => {
+    const calls: string[] = [];
+    let fail = true;
+    const source = fakeSource({
+      mutate: async (command) => {
+        const ref = command.params.spec.ref ?? "?";
+        calls.push(`${ref}:${String(command.resolvedParams.slug ?? command.resolvedParams.comment)}`);
+        if (ref === "link_comment" && fail) {
+          fail = false;
+          throw new Error("boom");
+        }
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: CREATE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    // User changes the slug before retrying → add_comment must fire AGAIN
+    // (different resolved params = a different write).
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c10", text: "hi" }) });
+
+    expect(calls).toEqual([
+      "add_comment:c9",
+      "link_comment:c9",
+      "add_comment:c10",
+      "link_comment:c10",
+    ]);
+    runtime.dispose();
+  });
+});
