@@ -501,6 +501,12 @@ describe("confirm + optimistic.remove", () => {
     ).toBe(true);
   });
 
+  it("rejects confirm: false — it would silently arm the guard anyway", () => {
+    expect(
+      MutationSpecSchema.safeParse({ ref: "del", confirm: false }).success,
+    ).toBe(false);
+  });
+
   it("parses optimistic remove, set, and both; rejects empty", () => {
     expect(
       MutationSpecSchema.safeParse({

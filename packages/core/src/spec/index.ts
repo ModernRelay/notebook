@@ -100,7 +100,7 @@ export const MutationSpecSchema = z
      * arm window dispatches. `true` → armed label "Confirm?"; a string is
      * used as the armed label (e.g. "Delete this task?").
      */
-    confirm: z.union([z.boolean(), z.string().min(1)]).optional(),
+    confirm: z.union([z.literal(true), z.string().min(1)]).optional(),
     /**
      * Catalog READ-query refs whose cells this mutation stales. After a
      * successful dispatch the runtime re-reads ONLY cells whose `query.ref`
