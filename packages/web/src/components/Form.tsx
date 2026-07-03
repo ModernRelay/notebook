@@ -82,10 +82,12 @@ export function Form({
       </p>
     );
   }
+  // Edit-forms remount on prefill-identity change; a create-form (no row)
+  // remounts on the last successful submit instead — clearing its fields.
   const rowKey =
     p.key_column !== undefined && row !== undefined
       ? String(row[p.key_column] ?? "")
-      : "__static__";
+      : `__static__:${String(row === undefined ? (p.runtime?.last_success_seq ?? 0) : 0)}`;
   return <FormFields key={rowKey} p={p} row={row} />;
 }
 

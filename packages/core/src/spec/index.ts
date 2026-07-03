@@ -61,10 +61,22 @@ export type ActionBinding = z.infer<typeof ActionBindingSchema>;
 // is just a typed param resolved from the clicked row (`$row`) or notebook
 // state (`$state`). See dash-books-canon.md §4.5.
 
-/** Optional local overlay applied to the clicked row while the write is in flight. */
+/**
+ * Optional local overlay applied to the clicked row while the write is in
+ * flight: `set` overlays column values (update-shaped mutations), `remove`
+ * hides the row entirely (delete-shaped mutations — the row is restored if
+ * the write fails or matches nothing).
+ */
 const OptimisticSpecSchema = z
-  .object({ set: z.record(z.string().min(1), z.unknown()) })
-  .strict();
+  .object({
+    set: z.record(z.string().min(1), z.unknown()).optional(),
+    remove: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (o) => o.set !== undefined || o.remove === true,
+    "optimistic needs `set` and/or `remove: true`",
+  );
 export type OptimisticSpec = z.infer<typeof OptimisticSpecSchema>;
 
 export const MutationSpecSchema = z
@@ -82,6 +94,13 @@ export const MutationSpecSchema = z
      */
     params: z.record(z.string(), z.unknown()).optional(),
     optimistic: OptimisticSpecSchema.optional(),
+    /**
+     * Destructive-action guard: the renderer arms the trigger on first
+     * activation (inline two-step) and only a second activation within the
+     * arm window dispatches. `true` → armed label "Confirm?"; a string is
+     * used as the armed label (e.g. "Delete this task?").
+     */
+    confirm: z.union([z.boolean(), z.string().min(1)]).optional(),
     /**
      * Catalog READ-query refs whose cells this mutation stales. After a
      * successful dispatch the runtime re-reads ONLY cells whose `query.ref`

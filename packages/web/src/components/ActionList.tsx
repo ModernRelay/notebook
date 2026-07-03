@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useActions, useStateValue } from "@json-render/react";
 import type { ActionListRuntimeProps } from "@modernrelay/notebook-core";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,27 @@ export function ActionList({
   const actions = useActions();
   const statusMap =
     useStateValue<Record<string, string>>(p.status_state ?? "/__never__") ?? {};
+  // Inline destructive guard: which action button is armed (`rowId:actionIdx`).
+  // A first click arms; only a second click within the window fires. The
+  // timer auto-disarms so a stray click can't linger as a loaded gun.
+  const [armed, setArmed] = useState<string | null>(null);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disarm = (): void => {
+    if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    disarmTimer.current = null;
+    setArmed(null);
+  };
+  const arm = (key: string): void => {
+    if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    disarmTimer.current = setTimeout(() => setArmed(null), 4000);
+    setArmed(key);
+  };
+  useEffect(
+    () => () => {
+      if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    },
+    [],
+  );
 
   if (p.rows.length === 0) {
     return <p className="text-sm italic text-muted-foreground">(no items)</p>;
@@ -133,22 +154,51 @@ export function ActionList({
             <div className="flex shrink-0 gap-2">
               {p.actions.map((act, aIdx) => {
                 const isCurrent = aIdx === currentActionIdx;
+                const confirm = act.mutation?.confirm;
+                const armKey = `${id}:${aIdx}`;
+                const isArmed = armed === armKey;
+                const label = isArmed
+                  ? typeof confirm === "string"
+                    ? confirm
+                    : "Confirm?"
+                  : act.label;
+                const fire = (): void => {
+                  disarm();
+                  fireAction(actions, act, row, id, p.runtime?.cell_id);
+                };
                 return (
-                  <Button
-                    key={`${aIdx}-${act.action ?? "mutate"}`}
-                    type="button"
-                    size="sm"
-                    variant={
-                      isCurrent
-                        ? "outline"
-                        : (BUTTON_VARIANT[act.variant ?? "default"] ?? "outline")
-                    }
-                    disabled={saving}
-                    aria-pressed={isCurrent}
-                    onClick={() => fireAction(actions, act, row, id, p.runtime?.cell_id)}
-                  >
-                    {act.label}
-                  </Button>
+                  <React.Fragment key={`${aIdx}-${act.action ?? "mutate"}`}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        isCurrent
+                          ? "outline"
+                          : (BUTTON_VARIANT[act.variant ?? "default"] ??
+                            "outline")
+                      }
+                      disabled={saving}
+                      aria-pressed={isCurrent}
+                      aria-live={confirm !== undefined ? "polite" : undefined}
+                      onClick={() => {
+                        if (confirm !== undefined && !isArmed) arm(armKey);
+                        else fire();
+                      }}
+                    >
+                      {label}
+                    </Button>
+                    {isArmed && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        aria-label="cancel"
+                        onClick={disarm}
+                      >
+                        ✕
+                      </Button>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </div>

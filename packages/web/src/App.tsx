@@ -538,7 +538,6 @@ export function SuccessToastBridge({
   return null;
 }
 
-/** App shell: centered column with an optional left cell-nav and header. */
 /** App shell: a single full-width centered column. The header is sticky; cell
  *  navigation lives in the ⌘K palette (no always-on sidebar). */
 function Shell({

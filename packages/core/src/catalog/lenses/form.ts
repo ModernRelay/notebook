@@ -111,10 +111,16 @@ export const FormRuntimePropsSchema = FormPropsBase.extend({
       saving: z.boolean(),
       /** Last batch failure, e.g. "set_priority: … (2/3 fields saved)". */
       error: z.string().optional(),
+      /**
+       * Seq of the last successful dispatch from this cell. A create-form
+       * (no prefill row) remounts on change — clearing entered values after
+       * a successful submit.
+       */
+      last_success_seq: z.number().optional(),
     })
     .optional(),
 }).superRefine(checkFormProps);
 export type FormRuntimeProps = z.infer<typeof FormRuntimePropsSchema>;
 
 export const FormDescription =
-  "Typed form over one entity: fields (text/number/select/toggle/textarea/date) prefill from the query's first row (via `column`, default = field name) or start blank without a query. Two write shapes, combinable: per-field `mutation`s dispatch ONLY when their field is dirty (edit-form), and form-level `mutations` dispatch together on every submit (create-form — one insert consuming several fields). All run as one sequential batch (independent commits, stop at first error, one re-read). Field values resolve via `{ $input: name }`, identity via `{ $row: col }` (the prefill row). `key_column` resets edits when the prefill row's identity changes. After a successful create-flow submit, entered values persist (no clear signal yet — v1 limitation).";
+  "Typed form over one entity: fields (text/number/select/toggle/textarea/date) prefill from the query's first row (via `column`, default = field name) or start blank without a query. Two write shapes, combinable: per-field `mutation`s dispatch ONLY when their field is dirty (edit-form), and form-level `mutations` dispatch together on every submit (create-form — one insert consuming several fields). All run as one sequential batch (independent commits, stop at first error, one re-read). Field values resolve via `{ $input: name }`, identity via `{ $row: col }` (the prefill row). `key_column` resets edits when the prefill row's identity changes. A create-form clears its fields after a successful submit.";

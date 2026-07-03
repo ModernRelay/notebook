@@ -1473,3 +1473,191 @@ describe("batch partial-failure retry (no double-commit)", () => {
     runtime.dispose();
   });
 });
+
+// ── P4: optimistic row removal + create-form success seq ───────────────────
+
+describe("optimistic row removal (delete)", () => {
+  const DELETE_NB: Notebook = {
+    version: 1,
+    title: "Del",
+    cells: [
+      {
+        id: "list",
+        lens: "ActionList",
+        query: { ref: "items" },
+        props: {
+          id_column: "id",
+          title_column: "title",
+          actions: [
+            {
+              label: "Delete",
+              variant: "danger",
+              mutation: {
+                ref: "del",
+                params: { slug: { $row: "id" } },
+                confirm: true,
+                optimistic: { remove: true },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  } as unknown as Notebook;
+
+  const ROWS = [
+    { id: "r1", title: "One" },
+    { id: "r2", title: "Two" },
+  ];
+
+  const listRows = (
+    runtime: ReturnType<typeof createNotebookRuntime>,
+  ): unknown[] => {
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "list");
+    const el = exec?.spec?.elements?.["list"] as
+      | { props?: { rows?: { id: string }[] } }
+      | undefined;
+    return (el?.props?.rows ?? []).map((r) => r.id);
+  };
+
+  const del = (runtime: ReturnType<typeof createNotebookRuntime>) =>
+    runtime.dispatch("mutate", {
+      params: {
+        spec: {
+          ref: "del",
+          params: { slug: { $row: "id" } },
+          optimistic: { remove: true },
+        },
+        row: ROWS[0],
+        rowKey: "r1",
+        __cell_id: "list",
+      },
+    });
+
+  function gatedSource(opts: { result: () => Promise<{ kind: "ok"; affected?: { nodes: number; edges: number } }> }) {
+    let rows = ROWS;
+    const source = fakeSource({
+      read: async () => ({
+        query_name: "items",
+        target: "main",
+        row_count: rows.length,
+        columns: ["id", "title"],
+        rows,
+      }),
+      mutate: async () => opts.result(),
+    });
+    return {
+      source,
+      dropRow: () => {
+        rows = ROWS.slice(1);
+      },
+    };
+  }
+
+  it("hides the row while in flight; success + re-read keeps it gone", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const { source, dropRow } = gatedSource({
+      result: async () => {
+        await gate;
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: DELETE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(listRows(runtime)).toEqual(["r1", "r2"]);
+
+    const done = del(runtime);
+    expect(listRows(runtime)).toEqual(["r2"]); // hidden immediately
+    dropRow(); // fresh server data no longer has r1
+    release?.();
+    await done;
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(listRows(runtime)).toEqual(["r2"]); // gone for real, no flicker
+    runtime.dispose();
+  });
+
+  it("failure restores the row", async () => {
+    const { source } = gatedSource({
+      result: async () => {
+        throw new Error("boom");
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: DELETE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await del(runtime);
+    expect(listRows(runtime)).toEqual(["r1", "r2"]); // restored
+    expect(runtime.getSnapshot().mutationError).toMatch(/boom/);
+    runtime.dispose();
+  });
+
+  it("no-op restores the row AND parks the row warning on it", async () => {
+    const { source } = gatedSource({
+      result: async () => ({ kind: "ok", affected: { nodes: 0, edges: 0 } }),
+    });
+    const runtime = createNotebookRuntime({ notebook: DELETE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await del(runtime);
+    expect(listRows(runtime)).toEqual(["r1", "r2"]); // restored
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "list");
+    const el = exec?.spec?.elements?.["list"] as
+      | {
+          props?: {
+            runtime?: { mutation_state?: Record<string, { error?: string }> };
+          };
+        }
+      | undefined;
+    expect(el?.props?.runtime?.mutation_state?.["r1"]?.error).toMatch(
+      /matched no rows/,
+    );
+    runtime.dispose();
+  });
+});
+
+describe("create-form last_success_seq", () => {
+  it("is absent before a success and injected after a successful batch", async () => {
+    const source = fakeSource({
+      mutate: async () => ({ kind: "ok", affected: { nodes: 1, edges: 0 } }),
+    });
+    const runtime = createNotebookRuntime({
+      notebook: formNotebook(false),
+      source,
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const seqOf = (): number | undefined => {
+      const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+      const el = exec?.spec?.elements?.["form"] as
+        | { props?: { runtime?: { last_success_seq?: number } } }
+        | undefined;
+      return el?.props?.runtime?.last_success_seq;
+    };
+    expect(seqOf()).toBeUndefined();
+
+    const fields = (formNotebook(false).cells[0]!.props as {
+      fields: { mutation: unknown }[];
+    }).fields;
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: [{ spec: fields[0]!.mutation }],
+        input: { title: "T" },
+        __cell_id: "form",
+      },
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const first = seqOf();
+    expect(typeof first).toBe("number");
+
+    await runtime.dispatch("mutate", {
+      params: {
+        mutations: [{ spec: fields[0]!.mutation }],
+        input: { title: "U" },
+        __cell_id: "form",
+      },
+    });
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(seqOf()).toBeGreaterThan(first!);
+    runtime.dispose();
+  });
+});
