@@ -1379,3 +1379,97 @@ describe("invalidationTargets", () => {
     expect([...t].sort()).toEqual(["a", "b"]);
   });
 });
+
+describe("batch partial-failure retry (no double-commit)", () => {
+  const CREATE_NB: Notebook = {
+    version: 1,
+    title: "Create",
+    cells: [
+      {
+        id: "form",
+        lens: "Form",
+        props: {
+          fields: [
+            { name: "slug", kind: "text" },
+            { name: "text", kind: "textarea" },
+          ],
+          mutations: [
+            { ref: "add_comment", params: { slug: { $input: "slug" }, text: { $input: "text" } } },
+            { ref: "link_comment", params: { comment: { $input: "slug" }, task: "t1" } },
+          ],
+        },
+      },
+    ],
+  } as unknown as Notebook;
+
+  const batchParams = (input: Record<string, unknown>) => ({
+    mutations: (CREATE_NB.cells[0]!.props as { mutations: unknown[] }).mutations.map(
+      (spec) => ({ spec }),
+    ),
+    input,
+    __cell_id: "form",
+  });
+
+  it("a committed entry is skipped on retry — even across repeated failures", async () => {
+    const calls: string[] = [];
+    let linkFailures = 2;
+    const source = fakeSource({
+      mutate: async (command) => {
+        const ref = command.params.spec.ref ?? "?";
+        calls.push(ref);
+        if (ref === "link_comment" && linkFailures > 0) {
+          linkFailures -= 1;
+          throw new Error("no task selected");
+        }
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: CREATE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    // Round 1: add commits, link fails → parked with "(1/2 fields saved)".
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    expect(runtime.getSnapshot().mutationError).toMatch(/link_comment.*\(1\/2 fields saved\)/);
+
+    // Round 2: add is SKIPPED (already committed), link fails again.
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    // Round 3: add still skipped, link finally succeeds.
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+
+    expect(calls).toEqual(["add_comment", "link_comment", "link_comment", "link_comment"]);
+    expect(runtime.getSnapshot().mutationError).toBeNull();
+    expect(runtime.getSnapshot().mutationFeedback?.message).toBe("Saved — 1 field, 1 row");
+    runtime.dispose();
+  });
+
+  it("edited input re-fires the entry (resolved params differ)", async () => {
+    const calls: string[] = [];
+    let fail = true;
+    const source = fakeSource({
+      mutate: async (command) => {
+        const ref = command.params.spec.ref ?? "?";
+        calls.push(`${ref}:${String(command.resolvedParams.slug ?? command.resolvedParams.comment)}`);
+        if (ref === "link_comment" && fail) {
+          fail = false;
+          throw new Error("boom");
+        }
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: CREATE_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c9", text: "hi" }) });
+    // User changes the slug before retrying → add_comment must fire AGAIN
+    // (different resolved params = a different write).
+    await runtime.dispatch("mutate", { params: batchParams({ slug: "c10", text: "hi" }) });
+
+    expect(calls).toEqual([
+      "add_comment:c9",
+      "link_comment:c9",
+      "add_comment:c10",
+      "link_comment:c10",
+    ]);
+    runtime.dispose();
+  });
+});
