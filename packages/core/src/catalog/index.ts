@@ -73,7 +73,9 @@ import {
   ToggleDescription,
 } from "./lenses/toggle.js";
 import {
+  SelectAuthorPropsSchema,
   SelectRuntimePropsSchema,
+  type SelectAuthorProps,
   SelectDescription,
 } from "./lenses/select.js";
 import {
@@ -186,7 +188,7 @@ export type LensSpec = Spec;
  */
 export function assembleLensSpec(
   cellId: string,
-  lens: LensKind,
+  lens: LensKind | "Select",
   authorProps: unknown,
   result: QueryResult,
   extra?: {
@@ -251,7 +253,7 @@ function buildElement(
 }
 
 function buildRuntimeProps(
-  lens: LensKind,
+  lens: LensKind | "Select",
   authorProps: unknown,
   result: QueryResult,
 ): Record<string, unknown> {
@@ -281,6 +283,14 @@ function buildRuntimeProps(
     case "Form": {
       const author: FormAuthorProps = FormAuthorPropsSchema.parse(authorProps);
       const runtime: FormRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Select": {
+      // Query-backed entity picker — the only path that routes Select here
+      // (a query-less Select stays on the control path).
+      const author: SelectAuthorProps =
+        SelectAuthorPropsSchema.parse(authorProps);
+      const runtime = { ...author, rows: result.rows };
       return runtime as unknown as Record<string, unknown>;
     }
     case "Timeline": {

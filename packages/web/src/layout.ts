@@ -42,7 +42,10 @@ export function heightToRows(height: Cell["height"]): number | undefined {
 }
 
 /** Per-lens default row span when a cell declares no `height`. */
-export function lensDefaultRows(lens: Cell["lens"]): number {
+export function lensDefaultRows(lens: Cell["lens"], cell?: Cell): number {
+  // A query-backed Select (entity picker) carries a label + combobox — the
+  // bare-control height clips it.
+  if (lens === "Select" && cell?.query !== undefined) return 5;
   switch (lens) {
     case "Table":
     case "Form":
@@ -104,7 +107,7 @@ export function buildTabLayout(
       continue;
     }
     const w = widthToCols(cell.width);
-    const h = heightToRows(cell.height) ?? lensDefaultRows(cell.lens);
+    const h = heightToRows(cell.height) ?? lensDefaultRows(cell.lens, cell);
     if (cx + w > GRID_COLS) {
       cx = 0;
       cy += rowH;

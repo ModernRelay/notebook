@@ -1661,3 +1661,196 @@ describe("create-form last_success_seq", () => {
     runtime.dispose();
   });
 });
+
+// ── Entity picker: dual-mode Select + Form picker option reads ─────────────
+
+describe("query-backed Select (dual-mode classification)", () => {
+  const PICKER_NB: Notebook = {
+    version: 1,
+    title: "Pick",
+    cells: [
+      {
+        id: "rev_pick",
+        lens: "Select",
+        query: { ref: "all_reviewers", params: { team: { $state: "/team" } } },
+        props: { value_column: "slug", label_column: "name", value: { $bindState: "/rev" } },
+      },
+      {
+        id: "static_pick",
+        lens: "Select",
+        props: { options: ["a", "b"], value: { $bindState: "/x" } },
+      },
+    ],
+  } as unknown as Notebook;
+
+  it("queried Select reads (rows in spec); static Select stays a control (no read)", async () => {
+    const source = fakeSource({
+      read: async () => ({
+        query_name: "all_reviewers",
+        target: "main",
+        row_count: 2,
+        columns: ["slug", "name"],
+        rows: [
+          { slug: "alice", name: "Alice" },
+          { slug: "bob", name: "Bob" },
+        ],
+      }),
+    });
+    const runtime = createNotebookRuntime({ notebook: PICKER_NB, source });
+    const snapshot = await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    const readCells = read.mock.calls.map((c) => (c[0] as ReadRequest).cellId);
+    expect(readCells).toEqual(["rev_pick"]); // static one never read
+
+    const pickExec = snapshot.cells.find((c) => c.cell.id === "rev_pick");
+    const el = pickExec?.spec?.elements?.["rev_pick"] as
+      | { props?: { rows?: unknown[] } }
+      | undefined;
+    expect(el?.props?.rows).toHaveLength(2);
+
+    const staticExec = snapshot.cells.find((c) => c.cell.id === "static_pick");
+    expect(staticExec?.result).toBeNull(); // control path
+    runtime.dispose();
+  });
+
+  it("a $state param in the picker query re-reads on state change", async () => {
+    const source = fakeSource({
+      read: async () => ({
+        query_name: "q", target: "main", row_count: 0, columns: [], rows: [],
+      }),
+    });
+    const runtime = createNotebookRuntime({ notebook: PICKER_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    const read = source.read as ReturnType<typeof vi.fn>;
+    read.mockClear();
+    runtime.applyStateChanges([{ path: "/team", value: "backend" }]);
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(read.mock.calls.map((c) => (c[0] as ReadRequest).cellId)).toEqual([
+      "rev_pick",
+    ]);
+    runtime.dispose();
+  });
+
+  it("invalidationTargets matches a queried Select by its query.ref", () => {
+    const targets = invalidationTargets(
+      [{ ref: "m", invalidates: ["all_reviewers"] }],
+      PICKER_NB,
+    );
+    expect([...targets]).toEqual(["rev_pick"]);
+  });
+});
+
+describe("Form picker option reads", () => {
+  const PICKER_FORM_NB: Notebook = {
+    version: 1,
+    title: "PickerForm",
+    cells: [
+      {
+        id: "form",
+        lens: "Form",
+        props: {
+          fields: [
+            { name: "slug", kind: "text" },
+            {
+              name: "task",
+              kind: "picker",
+              options_query: { ref: "all_tasks", params: { status: { $state: "/st" } } },
+              value_column: "slug",
+              label_column: "title",
+            },
+          ],
+          mutations: [
+            { ref: "link", params: { task: { $input: "task" } } },
+          ],
+        },
+      },
+    ],
+  } as unknown as Notebook;
+
+  const TASK_ROWS = [{ slug: "t1", title: "One" }];
+
+  const fieldOptions = (
+    runtime: ReturnType<typeof createNotebookRuntime>,
+  ): Record<string, unknown[]> | undefined => {
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+    const el = exec?.spec?.elements?.["form"] as
+      | { props?: { runtime?: { field_options?: Record<string, unknown[]> } } }
+      | undefined;
+    return el?.props?.runtime?.field_options;
+  };
+
+  it("reads the options_query (resolved params) and injects field_options", async () => {
+    const source = fakeSource({
+      read: async (request) => ({
+        query_name: request.queryRef ?? "q",
+        target: "main",
+        row_count: TASK_ROWS.length,
+        columns: ["slug", "title"],
+        rows: TASK_ROWS,
+      }),
+    });
+    const runtime = createNotebookRuntime({ notebook: PICKER_FORM_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+
+    const read = source.read as ReturnType<typeof vi.fn>;
+    // The query-less create-form still issues exactly one read: the options.
+    const optionCalls = read.mock.calls.filter(
+      (c) => (c[0] as ReadRequest).queryRef === "all_tasks",
+    );
+    expect(optionCalls).toHaveLength(1);
+    expect(fieldOptions(runtime)?.task).toEqual(TASK_ROWS);
+
+    // The form cell itself shows no error and empty prefill rows.
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+    expect(exec?.error).toBeNull();
+    runtime.dispose();
+  });
+
+  it("options-read failure keeps the cell healthy, parks a field error, retains last-good rows", async () => {
+    let fail = false;
+    const source = fakeSource({
+      read: async (request) => {
+        if ((request as ReadRequest).queryRef === "all_tasks" && fail) {
+          throw new Error("options down");
+        }
+        return {
+          query_name: "all_tasks",
+          target: "main",
+          row_count: TASK_ROWS.length,
+          columns: ["slug", "title"],
+          rows: TASK_ROWS,
+        };
+      },
+    });
+    const runtime = createNotebookRuntime({ notebook: PICKER_FORM_NB, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    expect(fieldOptions(runtime)?.task).toEqual(TASK_ROWS);
+
+    fail = true;
+    runtime.applyStateChanges([{ path: "/st", value: "review" }]); // dep re-read
+    // Wait for the failed options settle itself (status stays "ready"
+    // throughout a background re-read of an already-loaded notebook).
+    const errorsOf = (): Record<string, string> | undefined => {
+      const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+      const el = exec?.spec?.elements?.["form"] as
+        | { props?: { runtime?: { field_options_errors?: Record<string, string> } } }
+        | undefined;
+      return el?.props?.runtime?.field_options_errors;
+    };
+    await waitFor(runtime, () => errorsOf()?.task !== undefined);
+
+    const exec = runtime.getSnapshot().cells.find((c) => c.cell.id === "form");
+    expect(exec?.error).toBeNull(); // cell stays healthy
+    expect(fieldOptions(runtime)?.task).toEqual(TASK_ROWS); // stale rows kept
+    expect(errorsOf()?.task).toMatch(/options down/);
+    runtime.dispose();
+  });
+
+  it("invalidationTargets matches the form by its picker options_query.ref", () => {
+    const targets = invalidationTargets(
+      [{ ref: "add_task", invalidates: ["all_tasks"] }],
+      PICKER_FORM_NB,
+    );
+    expect([...targets]).toEqual(["form"]);
+  });
+});

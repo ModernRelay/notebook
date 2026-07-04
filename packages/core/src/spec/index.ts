@@ -285,6 +285,9 @@ export const CellSchema = z
   .strict()
   .refine(
     (c) => {
+      // A Select's query is optional: present → query-backed entity picker
+      // (rows become options); absent → today's static-options control.
+      if (c.lens === "Select") return true;
       const isControl = (ControlKind.options as readonly string[]).includes(
         c.lens,
       );
@@ -296,9 +299,33 @@ export const CellSchema = z
     },
     {
       message:
-        "data cells (Table/Path/Subgraph/ActionList/…) require a `query` (optional on Form); control cells (Button/Toggle/Select/TextInput/NumberInput) must not have one",
+        "data cells (Table/Path/Subgraph/ActionList/…) require a `query` (optional on Form and Select); control cells (Button/Toggle/TextInput/NumberInput) must not have one",
     },
-  );
+  )
+  .superRefine((c, ctx) => {
+    if (c.lens !== "Select") return;
+    const props = c.props as Record<string, unknown>;
+    const hasValueColumn = typeof props.value_column === "string";
+    if (c.query !== undefined && !hasValueColumn) {
+      ctx.addIssue({
+        code: "custom",
+        message: "query-backed Select requires props.value_column",
+      });
+    }
+    if (c.query !== undefined && props.options !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "query-backed Select must not declare static options (rows are the options)",
+      });
+    }
+    if (c.query === undefined && hasValueColumn) {
+      ctx.addIssue({
+        code: "custom",
+        message: "props.value_column requires a cell-level query",
+      });
+    }
+  });
 export type Cell = z.infer<typeof CellSchema>;
 
 export const NotebookSchema = z

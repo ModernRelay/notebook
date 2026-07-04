@@ -1,6 +1,7 @@
 import type { Cell, MutationSpec, Notebook } from "../spec/index.js";
 import { MutationSpecSchema } from "../spec/index.js";
 import { dataCellIds, isControl } from "./controls.js";
+import { formPickerQueries } from "./pickers.js";
 
 export interface OptimisticPatch {
   key: string;
@@ -119,13 +120,11 @@ export function invalidationTargets(
   const refs = new Set(specs.flatMap((s) => s.invalidates ?? []));
   const out = new Set<string>();
   for (const cell of notebook.cells) {
-    if (
-      !isControl(cell) &&
-      cell.query?.ref !== undefined &&
-      refs.has(cell.query.ref)
-    ) {
-      out.add(cell.id);
-    }
+    if (isControl(cell)) continue;
+    const reads =
+      (cell.query?.ref !== undefined && refs.has(cell.query.ref)) ||
+      formPickerQueries(cell).some((p) => refs.has(p.query.ref));
+    if (reads) out.add(cell.id);
   }
   if (originCellId !== undefined) {
     const origin = notebook.cells.find((c) => c.id === originCellId);

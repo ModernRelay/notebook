@@ -921,7 +921,8 @@ function CellCard({
             </CardAction>
           ) : (
             cell.error === null &&
-            cell.result !== null && (
+            cell.result !== null &&
+            cell.cell.lens !== "Select" && (
               <CardAction>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {cell.result.row_count} row

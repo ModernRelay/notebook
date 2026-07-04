@@ -41,6 +41,7 @@ import {
   type OptimisticPatch,
   patchesFromMutation,
 } from "./mutations.js";
+import { formPickerQueries } from "./pickers.js";
 import { validateNotebookCompatibility } from "./compatibility.js";
 import { errorMessage, isAbortError, stringProp } from "./utils.js";
 
@@ -124,6 +125,20 @@ class NotebookRuntimeImpl implements NotebookRuntime {
    * create-form keys its remount on this — a successful submit clears it.
    */
   private readonly successCells = new Map<string, number>();
+  /**
+   * Picker fields' option-read results per Form cell (field name → last good
+   * ReadOutput). A separate map beside rawResults so rebuildSpecsFromRaw
+   * keeps working untouched — injection happens via runtimePropsForCell.
+   */
+  private readonly fieldOptionsRaw = new Map<
+    string,
+    Record<string, ReadOutput>
+  >();
+  /** Per-field options-read failures (cell stays healthy; stale rows kept). */
+  private readonly fieldOptionsErrors = new Map<
+    string,
+    Record<string, string>
+  >();
   private disposed = false;
   private generation = 0;
   private mutationSeq = 0;
@@ -567,7 +582,9 @@ class NotebookRuntimeImpl implements NotebookRuntime {
       return;
     }
 
-    if (!cell.query) {
+    const pickers = cell.lens === "Form" ? formPickerQueries(cell) : [];
+
+    if (!cell.query && pickers.length === 0) {
       // A query-less Form is a blank create-form: no read, empty rows. The
       // synthetic result is stored in rawResults so rebuildSpecsFromRaw
       // refreshes its injected runtime props through the normal data path.
@@ -602,37 +619,90 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     // (stale-while-revalidate); the renderer shows a loading affordance.
     this.markCellPending(cell.id);
 
-    try {
-      const request = this.readRequestForCell(cell);
-      const readTarget = this.readTargetForCell(cell);
-      const raw = await this.source.read(request, {
+    const readTarget = this.readTargetForCell(cell);
+    const readContext = {
+      cellId: cell.id,
+      readTarget,
+      state: this.snapshot.state,
+      signal: controller.signal,
+    };
+
+    // Main read — the real query, or a resolved synthetic empty result for a
+    // query-less create-form that still has picker option reads to perform.
+    const mainRead: Promise<ReadOutput> = cell.query
+      ? this.source.read(this.readRequestForCell(cell), readContext)
+      : Promise.resolve({
+          query_name: cell.id,
+          target: "none",
+          row_count: 0,
+          columns: [],
+          rows: [],
+        });
+
+    // Picker option reads ride the same controller/generation as the main
+    // read: one cell, one lifecycle.
+    const optionReads = pickers.map((picker) => {
+      const request: ReadRequest = {
         cellId: cell.id,
-        readTarget,
-        state: this.snapshot.state,
-        signal: controller.signal,
+        queryRef: picker.query.ref,
+      };
+      if (picker.query.params !== undefined) {
+        request.params = resolveParams(picker.query.params, this.snapshot.state);
+      }
+      if (readTarget.branch !== undefined) request.branch = readTarget.branch;
+      if (readTarget.snapshot !== undefined) {
+        request.snapshot = readTarget.snapshot;
+      }
+      return this.source.read(request, readContext);
+    });
+
+    const [main, ...opts] = await Promise.allSettled([mainRead, ...optionReads]);
+    if (!this.isCurrentRun(cell.id, generation)) return;
+
+    if (pickers.length > 0) {
+      // Merge option results: success overwrites; failure keeps the field's
+      // last-good rows (stale-while-revalidate for options) and parks a
+      // per-field warning. Abort rejections are silent.
+      const byField = { ...(this.fieldOptionsRaw.get(cell.id) ?? {}) };
+      const fieldErrors: Record<string, string> = {};
+      opts.forEach((settled, index) => {
+        const name = pickers[index]!.name;
+        if (settled.status === "fulfilled") {
+          byField[name] = settled.value;
+        } else if (!isAbortError(settled.reason)) {
+          fieldErrors[name] = errorMessage(settled.reason);
+        }
       });
-      if (!this.isCurrentRun(cell.id, generation)) return;
-      this.rawResults.set(cell.id, raw);
+      this.fieldOptionsRaw.set(cell.id, byField);
+      if (Object.keys(fieldErrors).length > 0) {
+        this.fieldOptionsErrors.set(cell.id, fieldErrors);
+      } else {
+        this.fieldOptionsErrors.delete(cell.id);
+      }
+    }
+
+    if (main.status === "fulfilled") {
+      this.rawResults.set(cell.id, main.value);
       this.setCellExecution(
         cell.id,
-        this.buildDataCellExecution(cell, raw, Date.now() - start),
+        this.buildDataCellExecution(cell, main.value, Date.now() - start),
       );
-    } catch (err) {
-      if (!this.isCurrentRun(cell.id, generation) || isAbortError(err)) return;
-      // Stale-while-revalidate on failure: keep the last good spec/result
-      // visible and attach the error, instead of wiping the cell to an empty
-      // error state. rawResults is left intact so the stale view stays coherent.
-      // First-load failures have no prior spec, so they fall back to empty.
-      const previous = this.snapshot.cells.find(
-        (existing) => existing.cell.id === cell.id,
-      );
-      this.setCellExecution(cell.id, {
-        ...(previous ?? emptyCellExecution(cell)),
-        pending: false,
-        durationMs: Date.now() - start,
-        error: { message: errorMessage(err) },
-      });
+      return;
     }
+    if (isAbortError(main.reason)) return;
+    // Stale-while-revalidate on failure: keep the last good spec/result
+    // visible and attach the error, instead of wiping the cell to an empty
+    // error state. rawResults is left intact so the stale view stays coherent.
+    // First-load failures have no prior spec, so they fall back to empty.
+    const previousExecution = this.snapshot.cells.find(
+      (existing) => existing.cell.id === cell.id,
+    );
+    this.setCellExecution(cell.id, {
+      ...(previousExecution ?? emptyCellExecution(cell)),
+      pending: false,
+      durationMs: Date.now() - start,
+      error: { message: errorMessage(main.reason) },
+    });
   }
 
   private isCurrentRun(cellId: string, generation: number): boolean {
@@ -772,6 +842,8 @@ class NotebookRuntimeImpl implements NotebookRuntime {
     if (cell.lens === "Form") {
       const inflight = this.inflightCells.get(cell.id);
       const lastSuccess = this.successCells.get(cell.id);
+      const fieldOptions = this.fieldOptionsRaw.get(cell.id);
+      const fieldOptionErrors = this.fieldOptionsErrors.get(cell.id);
       return {
         runtime: {
           cell_id: cell.id,
@@ -779,6 +851,19 @@ class NotebookRuntimeImpl implements NotebookRuntime {
           ...(inflight?.error !== undefined ? { error: inflight.error } : {}),
           ...(lastSuccess !== undefined
             ? { last_success_seq: lastSuccess }
+            : {}),
+          ...(fieldOptions !== undefined
+            ? {
+                field_options: Object.fromEntries(
+                  Object.entries(fieldOptions).map(([name, output]) => [
+                    name,
+                    output.rows,
+                  ]),
+                ),
+              }
+            : {}),
+          ...(fieldOptionErrors !== undefined
+            ? { field_options_errors: fieldOptionErrors }
             : {}),
         },
       };
