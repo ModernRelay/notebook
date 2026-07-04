@@ -63,10 +63,14 @@ export function EntityPicker({
       ? ""
       : (items.find((item) => item.value === value)?.label ?? value);
   const [text, setText] = useState(selectedLabel);
-  // Re-reads and external state writes resync the input text.
+  const [open, setOpen] = useState(false);
+  // Re-reads and external state writes resync the input text — but never
+  // while the user is actively searching (popup open): a background re-read
+  // that changes the committed value's LABEL must not clobber mid-typing
+  // text. The close handler snaps back instead.
   useEffect(() => {
-    setText(selectedLabel);
-  }, [selectedLabel]);
+    if (!open) setText(selectedLabel);
+  }, [selectedLabel, open]);
 
   return (
     <Autocomplete
@@ -78,10 +82,11 @@ export function EntityPicker({
         setText(next);
         if (next === "") onValueChange(""); // clearing the input clears the pick
       }}
-      onOpenChange={(open, details) => {
+      onOpenChange={(nextOpen, details) => {
+        setOpen(nextOpen);
         // An abandoned edit (blur / escape / outside press) snaps the text
         // back to the committed label; item-press close resyncs via effect.
-        if (!open && details.reason !== "item-press") setText(selectedLabel);
+        if (!nextOpen && details.reason !== "item-press") setText(selectedLabel);
       }}
       openOnInputClick
       autoHighlight
