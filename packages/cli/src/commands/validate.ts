@@ -191,7 +191,18 @@ function validateCatalogRefs(
               code: "wrong_query_kind",
             });
           } else if (
-            !notebook.cells.some((c) => c.query?.ref === ref)
+            !notebook.cells.some(
+              (c) =>
+                c.query?.ref === ref ||
+                (Array.isArray(c.props.fields) &&
+                  c.props.fields.some(
+                    (f) =>
+                      f !== null &&
+                      typeof f === "object" &&
+                      (f as { options_query?: { ref?: unknown } })
+                        .options_query?.ref === ref,
+                  )),
+            )
           ) {
             warnings.push(
               `${mBase}/invalidates/${i}: no cell in this notebook reads '${ref}' — entry has no effect`,
@@ -256,6 +267,37 @@ function validateCatalogRefs(
             (field as Record<string, unknown>).mutation,
             `${base}/fields/${fIdx}/mutation`,
           );
+          // Picker fields: options_query must resolve to a catalog READ query.
+          const oq = (field as Record<string, unknown>).options_query;
+          if (oq && typeof oq === "object") {
+            const oqBase = `${base}/fields/${fIdx}/options_query`;
+            const oqRef = (oq as Record<string, unknown>).ref;
+            if (typeof oqRef === "string") {
+              const entry = queries.get(oqRef);
+              if (entry === undefined) {
+                errors.push({
+                  path: `${oqBase}/ref`,
+                  message: `catalog query '${oqRef}' does not exist or is not exposed`,
+                  code: "unknown_ref",
+                });
+              } else if (entry.mutation) {
+                errors.push({
+                  path: `${oqBase}/ref`,
+                  message: `catalog ref '${oqRef}' is a stored mutation; picker options require a read query`,
+                  code: "wrong_query_kind",
+                });
+              } else {
+                const op = validateParamMap(
+                  ((oq as Record<string, unknown>).params ?? {}) as Record<string, unknown>,
+                  entry.params,
+                  `${oqBase}/params`,
+                  oqRef,
+                );
+                errors.push(...op.errors);
+                warnings.push(...op.warnings);
+              }
+            }
+          }
         });
       }
       const formLevel = props.mutations;
@@ -290,7 +332,9 @@ function cellNeedsCatalog(cell: Cell): boolean {
   const hasRefMutation = (candidate: unknown): boolean =>
     candidate !== null &&
     typeof candidate === "object" &&
-    specNeedsCatalog((candidate as { mutation?: unknown }).mutation);
+    (specNeedsCatalog((candidate as { mutation?: unknown }).mutation) ||
+      typeof (candidate as { options_query?: { ref?: unknown } }).options_query
+        ?.ref === "string");
   const propsNeedCatalog = (props: Record<string, unknown>): boolean => {
     const actions = props.actions;
     if (Array.isArray(actions) && actions.some(hasRefMutation)) return true;

@@ -1,14 +1,21 @@
 import type { Notebook } from "../spec/index.js";
 import { isControl } from "./controls.js";
+import { formPickerQueries } from "./pickers.js";
 
 /** Map each data cell to the set of `$state` JSON pointers its query reads. */
 export function dependencyMap(notebook: Notebook): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   for (const cell of notebook.cells) {
-    if (isControl(cell) || !cell.query) continue;
+    if (isControl(cell)) continue;
+    const pickers = formPickerQueries(cell);
+    if (!cell.query && pickers.length === 0) continue;
     const deps = new Set<string>();
-    if (cell.query.params !== undefined)
+    if (cell.query?.params !== undefined)
       collectStatePointers(cell.query.params, deps);
+    for (const picker of pickers) {
+      if (picker.query.params !== undefined)
+        collectStatePointers(picker.query.params, deps);
+    }
     out.set(cell.id, deps);
   }
   return out;
@@ -75,8 +82,11 @@ export function notebookStateParams(notebook: Notebook): StateParam[] {
   };
 
   for (const cell of notebook.cells) {
-    if (isControl(cell) || !cell.query?.params) continue;
-    visit(cell.query.params);
+    if (isControl(cell)) continue;
+    if (cell.query?.params !== undefined) visit(cell.query.params);
+    for (const picker of formPickerQueries(cell)) {
+      if (picker.query.params !== undefined) visit(picker.query.params);
+    }
   }
 
   return order.map((pointer) => {

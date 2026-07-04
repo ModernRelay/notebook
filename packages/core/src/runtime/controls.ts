@@ -12,7 +12,11 @@ const CONTROL_KINDS: readonly ControlKind[] = [
 ];
 
 export function isControl(cell: Cell): boolean {
-  return (CONTROL_KINDS as readonly string[]).includes(cell.lens);
+  if (!(CONTROL_KINDS as readonly string[]).includes(cell.lens)) return false;
+  // A query-backed Select is a data cell: it reads, registers $state deps,
+  // and participates in invalidation. A query-less Select stays a control.
+  if (cell.lens === "Select" && cell.query !== undefined) return false;
+  return true;
 }
 
 export function dataCellIds(notebook: Notebook): string[] {

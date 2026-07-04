@@ -531,3 +531,64 @@ describe("confirm + optimistic.remove", () => {
     ).toBe(false);
   });
 });
+
+describe("query-backed Select + Form picker fields", () => {
+  const nb = (cells: string) => `
+version: 1
+title: x
+cells:
+${cells}`;
+
+  it("Select + query + value_column parses", () => {
+    expect(() =>
+      parseNotebook(nb(`
+  - id: pick
+    lens: Select
+    query: { ref: all_reviewers }
+    props:
+      value_column: slug
+      label_column: name
+      value: { $bindState: /rev }
+`)),
+    ).not.toThrow();
+  });
+
+  it("Select + query without value_column rejected", () => {
+    expect(() =>
+      parseNotebook(nb(`
+  - id: pick
+    lens: Select
+    query: { ref: all_reviewers }
+    props: { label: Reviewer }
+`)),
+    ).toThrow(/requires props.value_column/);
+  });
+
+  it("Select + query + static options rejected", () => {
+    expect(() =>
+      parseNotebook(nb(`
+  - id: pick
+    lens: Select
+    query: { ref: q }
+    props: { value_column: slug, options: [a, b] }
+`)),
+    ).toThrow(/must not declare static options/);
+  });
+
+  it("value_column without a query rejected; static Select still parses", () => {
+    expect(() =>
+      parseNotebook(nb(`
+  - id: pick
+    lens: Select
+    props: { value_column: slug }
+`)),
+    ).toThrow(/requires a cell-level query/);
+    expect(() =>
+      parseNotebook(nb(`
+  - id: pick
+    lens: Select
+    props: { options: [a, b], value: { $bindState: /x } }
+`)),
+    ).not.toThrow();
+  });
+});

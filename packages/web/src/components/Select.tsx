@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EntityPicker } from "./EntityPicker.js";
 
 interface ComponentCtx<P> {
   props: P;
@@ -26,14 +27,35 @@ export function Select({
   bindings,
 }: ComponentCtx<SelectRuntimeProps>): React.ReactElement {
   const [value, setValue] = useBoundProp<string>(p.value, bindings?.value);
-  const items = p.options.map((opt) => ({
+
+  // Query-backed entity picker: rows are the options, rendered as a
+  // searchable typeahead. Static-options Selects keep the plain dropdown.
+  if (p.value_column !== undefined) {
+    return (
+      <label className="inline-flex w-full items-center gap-2 text-sm text-foreground">
+        {p.label ? (
+          <span className="shrink-0 text-muted-foreground">{p.label}</span>
+        ) : null}
+        <EntityPicker
+          rows={p.rows ?? []}
+          valueColumn={p.value_column}
+          labelColumn={p.label_column}
+          value={value ?? ""}
+          onValueChange={setValue}
+          placeholder={p.placeholder}
+        />
+      </label>
+    );
+  }
+
+  const items = (p.options ?? []).map((opt) => ({
     label: opt === "" ? "— any —" : opt,
     value: toUi(opt),
   }));
   // The sentinel is only a real item when "" is among the options. With no ""
   // option and nothing selected, pass null so Base UI renders the placeholder
   // — mapping to the sentinel there would print the raw "__any__" string.
-  const hasAnyOption = p.options.includes("");
+  const hasAnyOption = (p.options ?? []).includes("");
   const uiValue =
     value === undefined || value === ""
       ? hasAnyOption
@@ -52,7 +74,7 @@ export function Select({
         }
       >
         <SelectTrigger className="w-auto min-w-44">
-          <SelectValue placeholder="Select…" />
+          <SelectValue placeholder={p.placeholder ?? "Select…"} />
         </SelectTrigger>
         <SelectPopup>
           {items.map((it) => (

@@ -2,6 +2,19 @@ import { z } from "zod";
 import { MutationSpecSchema } from "../../spec/index.js";
 
 /**
+ * A picker field's options source: a catalog READ query invoked alongside the
+ * cell's main read. Deliberately narrower than a cell query — no rawGq /
+ * branch / snapshot in v1.
+ */
+export const OptionsQuerySchema = z
+  .object({
+    ref: z.string().min(1),
+    params: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+export type OptionsQuery = z.infer<typeof OptionsQuerySchema>;
+
+/**
  * One typed field in a Form. Each field carries its OWN catalog mutation —
  * submit dispatches only the dirty fields' mutations (omnigraph mutations
  * require every declared param, so per-field mutations are the honest shape
@@ -17,11 +30,28 @@ const FormFieldSchema = z
     name: z.string().min(1),
     /** Display label; defaults to `name`. */
     label: z.string().optional(),
-    kind: z.enum(["text", "number", "select", "toggle", "textarea", "date"]),
+    kind: z.enum([
+      "text",
+      "number",
+      "select",
+      "toggle",
+      "textarea",
+      "date",
+      "picker",
+    ]),
     /** Prefill column in the query's first row. Default: `name`. */
     column: z.string().min(1).optional(),
     /** Select options (select kind only). */
     options: z.array(z.string().min(1)).optional(),
+    /**
+     * Picker kind only: the catalog read whose rows become the options
+     * (typeahead). The runtime reads it alongside the cell's main query.
+     */
+    options_query: OptionsQuerySchema.optional(),
+    /** Picker: result column written as the field's value when picked. */
+    value_column: z.string().min(1).optional(),
+    /** Picker: display column; defaults to `value_column`. */
+    label_column: z.string().min(1).optional(),
     /**
      * Submit is blocked while a required field is empty. Also the guard for
      * non-nullable params: an empty number field dispatches `null`, which
@@ -44,6 +74,35 @@ const FormFieldSchema = z
       ctx.addIssue({
         code: "custom",
         message: `select field '${f.name}' requires non-empty options`,
+      });
+    }
+    if (f.kind === "picker") {
+      if (f.options_query === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `picker field '${f.name}' requires options_query`,
+        });
+      }
+      if (f.value_column === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `picker field '${f.name}' requires value_column`,
+        });
+      }
+      if (f.options !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `picker field '${f.name}' must not declare static options`,
+        });
+      }
+    } else if (
+      f.options_query !== undefined ||
+      f.value_column !== undefined ||
+      f.label_column !== undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: `field '${f.name}': options_query/value_column/label_column require kind: picker`,
       });
     }
   });
@@ -117,10 +176,16 @@ export const FormRuntimePropsSchema = FormPropsBase.extend({
        * a successful submit.
        */
       last_success_seq: z.number().optional(),
+      /** Picker fields' option rows, keyed by field name (runtime-read). */
+      field_options: z
+        .record(z.string(), z.array(z.record(z.string(), z.unknown())))
+        .optional(),
+      /** Per-field options-read failures (cell stays healthy; stale rows kept). */
+      field_options_errors: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
 }).superRefine(checkFormProps);
 export type FormRuntimeProps = z.infer<typeof FormRuntimePropsSchema>;
 
 export const FormDescription =
-  "Typed form over one entity: fields (text/number/select/toggle/textarea/date) prefill from the query's first row (via `column`, default = field name) or start blank without a query. Two write shapes, combinable: per-field `mutation`s dispatch ONLY when their field is dirty (edit-form), and form-level `mutations` dispatch together on every submit (create-form — one insert consuming several fields). All run as one sequential batch (independent commits, stop at first error, one re-read). Field values resolve via `{ $input: name }`, identity via `{ $row: col }` (the prefill row). `key_column` resets edits when the prefill row's identity changes. A create-form clears its fields after a successful submit.";
+  "Typed form over one entity: fields (text/number/select/toggle/textarea/date/picker — picker options come from a per-field `options_query` read, picked value = `value_column`) prefill from the query's first row (via `column`, default = field name) or start blank without a query. Two write shapes, combinable: per-field `mutation`s dispatch ONLY when their field is dirty (edit-form), and form-level `mutations` dispatch together on every submit (create-form — one insert consuming several fields). All run as one sequential batch (independent commits, stop at first error, one re-read). Field values resolve via `{ $input: name }`, identity via `{ $row: col }` (the prefill row). `key_column` resets edits when the prefill row's identity changes. A create-form clears its fields after a successful submit.";

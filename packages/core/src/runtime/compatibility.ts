@@ -1,6 +1,7 @@
 import type { Notebook } from "../spec/index.js";
 import type { SourceCapabilities } from "./types.js";
 import { cellMutations } from "./mutations.js";
+import { formPickerQueries } from "./pickers.js";
 
 interface CompatibilityResult {
   errors: string[];
@@ -43,6 +44,16 @@ export function validateNotebookCompatibility(
     }
     if (cell.query?.snapshot !== undefined && !capabilities.snapshotReads) {
       errors.push(`${cell.id}: selected source does not support snapshot reads`);
+    }
+
+    // Picker option reads are catalog invocations too.
+    if (
+      formPickerQueries(cell).length > 0 &&
+      !capabilities.namedQueries
+    ) {
+      errors.push(
+        `${cell.id}: selected source does not support named catalog queries (picker options_query)`,
+      );
     }
 
     // Mutations mirror the read gate: `ref` needs named-query support; `rawGq`

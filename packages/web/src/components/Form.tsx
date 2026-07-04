@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { EntityPicker } from "./EntityPicker.js";
 import { cn } from "@/lib/utils";
 
 interface ComponentCtx<P> {
@@ -166,6 +167,8 @@ function FormFields({
           dirty={isDirty(f)}
           disabled={saving}
           onChange={(v) => setField(f.name, v)}
+          options={p.runtime?.field_options?.[f.name]}
+          optionsError={p.runtime?.field_options_errors?.[f.name]}
         />
       ))}
       {p.runtime?.error !== undefined && (
@@ -196,12 +199,18 @@ function FieldControl({
   dirty,
   disabled,
   onChange,
+  options,
+  optionsError,
 }: {
   field: FormField;
   value: unknown;
   dirty: boolean;
   disabled: boolean;
   onChange: (v: unknown) => void;
+  /** Picker fields: option rows from the runtime's options_query read. */
+  options?: Record<string, unknown>[];
+  /** Picker fields: options-read failure (stale/empty options shown). */
+  optionsError?: string;
 }): React.ReactElement {
   const label = f.label ?? f.name;
   const labelEl = (
@@ -217,6 +226,28 @@ function FieldControl({
   );
 
   switch (f.kind) {
+    case "picker":
+      return (
+        <label className="flex items-center gap-2">
+          {labelEl}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <EntityPicker
+              rows={options ?? []}
+              valueColumn={f.value_column ?? f.name}
+              labelColumn={f.label_column}
+              value={String(value ?? "")}
+              onValueChange={(v) => onChange(v)}
+              placeholder={f.placeholder}
+              disabled={disabled}
+            />
+            {optionsError !== undefined && (
+              <span className="text-xs text-warning">
+                ⚠ options unavailable: {optionsError}
+              </span>
+            )}
+          </div>
+        </label>
+      );
     case "toggle":
       return (
         <label className="flex items-center gap-2">

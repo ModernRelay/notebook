@@ -167,30 +167,33 @@ cells:
             invalidates: [get_task]
 
   # ── Assign ─────────────────────────────────────────────────────────────────
-  # Two graph-driven pickers feed a multi-$state-param edge insert.
+  # Two query-backed entity pickers (searchable typeahead — a Select whose
+  # cell-level query supplies the options) feed a multi-$state-param edge
+  # insert. value_column is what gets written to state; label_column is what
+  # the user sees and types against.
   - id: assign_task_pick
     tab: Assign
-    lens: Table
+    lens: Select
     width: half
     query: { ref: all_tasks }
     props:
-      select_state: /selectedTask
-      select_column: slug
-      columns:
-        - { key: slug, label: ID }
-        - { key: title, label: Task }
+      label: Task
+      value_column: slug
+      label_column: title
+      placeholder: Search tasks…
+      value: { $bindState: /selectedTask }
 
   - id: assign_reviewer_pick
     tab: Assign
-    lens: Table
+    lens: Select
     width: half
     query: { ref: all_reviewers }
     props:
-      select_state: /selectedReviewer
-      select_column: slug
-      columns:
-        - { key: name, label: Reviewer }
-        - { key: team, label: Team, badge: true }
+      label: Reviewer
+      value_column: slug
+      label_column: name
+      placeholder: Search reviewers…
+      value: { $bindState: /selectedReviewer }
 
   # The Assign button lives INSIDE the assignees card (cell.controls) — it acts
   # on this cell's data view, so it doesn't get a card of its own.
@@ -254,11 +257,13 @@ cells:
         - { key: days, label: Est. days, align: right }
 
   # ── Comment / raw ──────────────────────────────────────────────────────────
-  # Create-form: one Form card, no query (blank fields), form-level `mutations`
-  # fire together on submit — add_comment (node insert) consumes BOTH fields,
-  # then link_comment (edge insert) chains the new comment to the selected
-  # task. Sequential commits: if no task is selected the link step fails and
-  # the error reports "(1/2 fields saved)" — the batch semantics, visible.
+  # Create-form with a PICKER field: `task` gets its options from a per-field
+  # options_query read (all_tasks — re-read automatically whenever a task
+  # mutation invalidates that ref), and the picked slug flows into
+  # link_comment via { $input: task } — no cross-tab state dependency, and
+  # the required picker makes the old "(1/2 fields saved)" failure
+  # unrepresentable. Batch semantics are unchanged: sequential commits,
+  # stop-at-first-error, committed entries skipped on retry.
   - id: comment_form
     tab: Comment / raw
     lens: Form
@@ -276,6 +281,14 @@ cells:
           kind: textarea
           required: true
           placeholder: Write a comment…
+        - name: task
+          label: Task
+          kind: picker
+          required: true
+          options_query: { ref: all_tasks }
+          value_column: slug
+          label_column: title
+          placeholder: Search tasks…
       mutations:
         - ref: add_comment
           params:
@@ -285,7 +298,7 @@ cells:
         - ref: link_comment
           params:
             comment: { $input: slug }
-            task: { $state: /selectedTask }
+            task: { $input: task }
           invalidates: [task_comments]
 
   - id: comment_list

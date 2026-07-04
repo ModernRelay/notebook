@@ -220,3 +220,77 @@ describe("Form lens — form-level mutations (create-form)", () => {
     ).toThrow(/form declares no mutation/);
   });
 });
+
+describe("query-backed Select assembly", () => {
+  it("injects rows and passes the $bindState value marker through", () => {
+    const spec = assembleLensSpec(
+      "pick",
+      "Select",
+      { value_column: "from", label_column: "to", value: { $bindState: "/sel" } },
+      fakeResult,
+    );
+    const props = spec.elements["pick"]?.props as {
+      rows: unknown[];
+      value: unknown;
+    };
+    expect(props.rows).toEqual(fakeResult.rows);
+    expect(props.value).toEqual({ $bindState: "/sel" });
+  });
+
+  it("author schema rejects a missing value_column", () => {
+    expect(() =>
+      assembleLensSpec("pick", "Select", { label: "X" }, fakeResult),
+    ).toThrow();
+  });
+});
+
+describe("Form picker field schema", () => {
+  it("picker requires options_query + value_column; non-picker forbids them", () => {
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        {
+          fields: [
+            {
+              name: "task",
+              kind: "picker",
+              options_query: { ref: "all_tasks" },
+              value_column: "slug",
+            },
+          ],
+          mutations: [{ ref: "m", params: {} }],
+        },
+        fakeResult,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        {
+          fields: [{ name: "task", kind: "picker" }],
+          mutations: [{ ref: "m", params: {} }],
+        },
+        fakeResult,
+      ),
+    ).toThrow(/requires options_query/);
+    expect(() =>
+      assembleLensSpec(
+        "f",
+        "Form",
+        {
+          fields: [
+            {
+              name: "title",
+              kind: "text",
+              options_query: { ref: "q" },
+              mutation: { ref: "m" },
+            },
+          ],
+        },
+        fakeResult,
+      ),
+    ).toThrow(/require kind: picker/);
+  });
+});
