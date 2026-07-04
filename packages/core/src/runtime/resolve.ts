@@ -166,6 +166,19 @@ function resolveExpr(
     const field = (value as { $input: unknown }).$input;
     return typeof field === "string" ? input[field] : undefined;
   }
+  if ("$now" in value) {
+    // Dispatch-time timestamp: { $now: date } → "YYYY-MM-DD",
+    // { $now: datetime } → full ISO 8601. Optional `offset_days` shifts the
+    // instant (e.g. -60 → sixty days ago) for threshold params like
+    // "updated before". Never goes stale in the YAML.
+    const marker = value as { $now: unknown; offset_days?: unknown };
+    const offsetDays =
+      typeof marker.offset_days === "number" ? marker.offset_days : 0;
+    const iso = new Date(
+      Date.now() + offsetDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    return marker.$now === "datetime" ? iso : iso.slice(0, 10);
+  }
   if ("$state" in value) {
     const obj = value as { $state: unknown; default?: unknown };
     if (typeof obj.$state !== "string") return undefined;
