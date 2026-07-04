@@ -67,7 +67,9 @@ import {
   EMPTY_OVERRIDES,
   isHidden,
   loadOverrides,
+  migrateV2,
   notebookKey,
+  pruneOverrides,
   saveOverrides,
   withColor,
   withHidden,
@@ -167,13 +169,24 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
   >(null);
   const [cmdOpen, setCmdOpen] = useState(false);
 
-  // Layout edit mode: browser-local drag-reorder + width-resize, persisted to
-  // localStorage. An override layer over the declared layout; Reset clears it.
+  // Layout edit mode: drag-reorder + width-resize. Two override layers, both
+  // per-cell: the committed sidecar (`<notebook>.layout.json`, injected by the
+  // view BFF as `config.initialLayout`) is the base; localStorage holds
+  // personal changes since the last save and wins wholesale when present.
+  // "Save layout" writes the effective set to the sidecar and clears the
+  // local layer; Reset clears only the local layer.
   const [editing, setEditing] = useState(false);
   const layoutKey = useMemo(() => notebookKey(config.notebook), [config.notebook]);
-  const [overrides, setOverrides] = useState<LayoutOverrides>(() =>
-    loadOverrides(layoutKey),
+  const liveIds = useMemo(
+    () => new Set(config.notebook.cells.map((c) => c.id)),
+    [config.notebook],
   );
+  const [overrides, setOverrides] = useState<LayoutOverrides>(() => {
+    const local =
+      loadOverrides(layoutKey) ?? migrateV2(config.notebook.title, liveIds);
+    if (local !== null) return pruneOverrides(local, liveIds);
+    return config.initialLayout ?? EMPTY_OVERRIDES;
+  });
   const updateOverrides = useCallback(
     (next: LayoutOverrides) => {
       setOverrides(next);
@@ -182,9 +195,45 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     [layoutKey],
   );
   const resetLayout = useCallback(() => {
-    setOverrides(EMPTY_OVERRIDES);
+    // Drop the personal layer only — the committed sidecar (if any) remains
+    // the base. Removing a committed arrangement = delete the sidecar file.
+    setOverrides(config.initialLayout ?? EMPTY_OVERRIDES);
     clearOverrides(layoutKey);
-  }, [layoutKey]);
+  }, [layoutKey, config.initialLayout]);
+  const [savingLayout, setSavingLayout] = useState(false);
+  // Save-layout outcome, announced through the same toast bridge as mutation
+  // feedback (the ToastProvider mounts inside this component's tree).
+  const [layoutNotice, setLayoutNotice] = useState<MutationFeedback | null>(
+    null,
+  );
+  const persistLayout = useCallback(async () => {
+    const effective = pruneOverrides(overrides, liveIds);
+    setSavingLayout(true);
+    try {
+      const res = await fetch("/layout", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: 1, ...effective }),
+      });
+      if (!res.ok) throw new Error(`PUT /layout returned ${res.status}`);
+      // Disk is now the base — clear the personal layer, keep the canvas as-is.
+      clearOverrides(layoutKey);
+      setOverrides(effective);
+      setLayoutNotice((prev) => ({
+        kind: "success",
+        message: "Layout saved to the notebook's .layout.json",
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    } catch (err) {
+      setLayoutNotice((prev) => ({
+        kind: "success",
+        message: `Layout save failed: ${err instanceof Error ? err.message : String(err)}`,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    } finally {
+      setSavingLayout(false);
+    }
+  }, [overrides, liveIds, layoutKey]);
 
   // Tabs partition the one flat cell list into named pages (host-shell view
   // tier). Derived from the *declared* cells so the bar is stable across runtime
@@ -320,6 +369,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     >
       <ToastProvider>
       <SuccessToastBridge feedback={snapshot.mutationFeedback} />
+      <SuccessToastBridge feedback={layoutNotice} />
       <Shell
         header={
           <div className="sticky top-0 z-30 border-b border-border bg-background">
@@ -354,8 +404,21 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
                   size="sm"
                   onClick={resetLayout}
                   className="text-muted-foreground"
+                  title="Discard personal layout changes (the saved .layout.json, if any, remains)"
                 >
                   Reset
+                </Button>
+              )}
+              {editing && config.canPersistLayout && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void persistLayout()}
+                  disabled={savingLayout}
+                  title="Write the current arrangement to the notebook's .layout.json (git-committable)"
+                >
+                  {savingLayout ? "Saving…" : "Save layout"}
                 </Button>
               )}
               <Button

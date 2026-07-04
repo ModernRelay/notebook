@@ -32,41 +32,113 @@ export const EMPTY_OVERRIDES: LayoutOverrides = {
   colors: {},
 };
 const EMPTY = EMPTY_OVERRIDES;
-const KEY_PREFIX = "dashbook:layout:v2:";
+const KEY_PREFIX = "dashbook:layout:v3:";
+const V2_PREFIX = "dashbook:layout:v2:";
 
-/** djb2 → base36: a compact, stable fingerprint of the cell-id set. */
-function hashIds(ids: string[]): string {
-  const joined = [...ids].sort().join(" ");
-  let h = 5381;
-  for (let i = 0; i < joined.length; i++) {
-    h = ((h << 5) + h + joined.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(36);
+/**
+ * Stable `localStorage` key for a notebook — the title alone. Editing the
+ * notebook's cells must NOT reset the arrangement: overrides are per-cell, so
+ * surviving cells keep their boxes and orphans are pruned (`pruneOverrides`).
+ * (v2 keyed on title + a cell-id fingerprint, which wholesale-reset the canvas
+ * on any notebook edit; `migrateV2` adopts those entries once.)
+ */
+export function notebookKey(notebook: Notebook): string {
+  return `${KEY_PREFIX}${notebook.title}`;
 }
 
 /**
- * Stable `localStorage` key for a notebook: title + a fingerprint of its cell-id
- * set, so structurally-different notebooks (and edited ones) don't mis-apply
- * each other's saved arrangements.
+ * Validate an untrusted overrides payload (localStorage, the layout sidecar,
+ * a v2 migration) into a well-formed LayoutOverrides — malformed parts drop
+ * to empty rather than poisoning the canvas.
  */
-export function notebookKey(notebook: Notebook): string {
-  return `${KEY_PREFIX}${notebook.title}:${hashIds(notebook.cells.map((c) => c.id))}`;
+export function normalizeOverrides(parsed: unknown): LayoutOverrides {
+  if (typeof parsed !== "object" || parsed === null) return EMPTY;
+  const o = parsed as Partial<LayoutOverrides>;
+  return {
+    layout: isLayoutMap(o.layout) ? o.layout : {},
+    hidden: Array.isArray(o.hidden)
+      ? o.hidden.filter((x): x is string => typeof x === "string")
+      : [],
+    colors: isColorMap(o.colors) ? o.colors : {},
+  };
 }
 
-export function loadOverrides(key: string): LayoutOverrides {
+/**
+ * Drop overrides for cells that no longer exist in the notebook. Applied at
+ * load and before persisting, so deleted cells' boxes never accumulate or get
+ * written to the sidecar.
+ */
+export function pruneOverrides(
+  o: LayoutOverrides,
+  liveIds: ReadonlySet<string>,
+): LayoutOverrides {
+  const layout: Record<string, CardBox> = {};
+  for (const [id, box] of Object.entries(o.layout)) {
+    if (liveIds.has(id)) layout[id] = box;
+  }
+  const colors: Record<string, string> = {};
+  for (const [id, color] of Object.entries(o.colors)) {
+    if (liveIds.has(id)) colors[id] = color;
+  }
+  return {
+    layout,
+    hidden: o.hidden.filter((id) => liveIds.has(id)),
+    colors,
+  };
+}
+
+/** The stored personal overrides, or null when this browser has none. */
+export function loadOverrides(key: string): LayoutOverrides | null {
   try {
     const raw = window.localStorage.getItem(key);
-    if (!raw) return EMPTY;
-    const parsed = JSON.parse(raw) as Partial<LayoutOverrides>;
-    return {
-      layout: isLayoutMap(parsed.layout) ? parsed.layout : {},
-      hidden: Array.isArray(parsed.hidden)
-        ? parsed.hidden.filter((x): x is string => typeof x === "string")
-        : [],
-      colors: isColorMap(parsed.colors) ? parsed.colors : {},
-    };
+    if (!raw) return null;
+    return normalizeOverrides(JSON.parse(raw));
   } catch {
-    return EMPTY; // unparseable / unavailable storage → declared defaults
+    return null; // unparseable / unavailable storage → no personal layer
+  }
+}
+
+/**
+ * One-time adoption of a pre-v3 arrangement: on a v3 miss, find this title's
+ * newest v2 entry (keyed `v2:<title>:<cell-fingerprint>`), re-home it under
+ * the stable v3 key, and delete every v2 entry for the title.
+ */
+export function migrateV2(
+  title: string,
+  liveIds: ReadonlySet<string>,
+): LayoutOverrides | null {
+  try {
+    const prefix = `${V2_PREFIX}${title}:`;
+    const oldKeys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key !== null && key.startsWith(prefix)) oldKeys.push(key);
+    }
+    if (oldKeys.length === 0) return null;
+    let adopted: LayoutOverrides | null = null;
+    for (const key of oldKeys) {
+      const raw = window.localStorage.getItem(key);
+      if (adopted === null && raw) {
+        const candidate = pruneOverrides(
+          normalizeOverrides(JSON.parse(raw)),
+          liveIds,
+        );
+        if (
+          Object.keys(candidate.layout).length > 0 ||
+          candidate.hidden.length > 0 ||
+          Object.keys(candidate.colors).length > 0
+        ) {
+          adopted = candidate;
+        }
+      }
+      window.localStorage.removeItem(key);
+    }
+    if (adopted !== null) {
+      saveOverrides(`${KEY_PREFIX}${title}`, adopted);
+    }
+    return adopted;
+  } catch {
+    return null;
   }
 }
 

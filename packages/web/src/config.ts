@@ -2,12 +2,26 @@ import { parseNotebook } from "@modernrelay/notebook-core";
 import { Client, ServerSource } from "@modernrelay/notebook-client";
 import type { Source } from "@modernrelay/notebook-core";
 
+import {
+  normalizeOverrides,
+  pruneOverrides,
+  type LayoutOverrides,
+} from "./layout-overrides.js";
+
 import defaultServerNotebookYaml from "../../../examples/company-server.notebook.yaml?raw";
 
 export interface AppConfig {
   notebook: ReturnType<typeof parseNotebook>;
   source: Source;
   label: string;
+  /**
+   * The committed layout sidecar (`<notebook>.layout.json`), injected by the
+   * `view` BFF — the base layer under any personal localStorage tweaks. Null
+   * without a sidecar (or outside the BFF, e.g. Vite dev).
+   */
+  initialLayout: LayoutOverrides | null;
+  /** True when the serving BFF accepts PUT /layout ("Save layout" enabled). */
+  canPersistLayout: boolean;
 }
 
 /**
@@ -21,6 +35,8 @@ interface InjectedConfig {
   graph?: string;
   branch?: string;
   allowRawGq?: boolean;
+  layout?: unknown;
+  canPersistLayout?: boolean;
 }
 declare global {
   interface Window {
@@ -94,6 +110,14 @@ export async function buildConfig(): Promise<AppConfig> {
     token: readToken(server),
     graphId: graph,
   });
+  // Layout sidecar contents ride the injected config (read per page load by
+  // the BFF); validate + prune against this notebook's cells before use.
+  const liveIds = new Set(notebook.cells.map((c) => c.id));
+  const initialLayout =
+    injected.layout !== undefined && injected.layout !== null
+      ? pruneOverrides(normalizeOverrides(injected.layout), liveIds)
+      : null;
+
   return {
     notebook,
     source: new ServerSource(client, {
@@ -101,6 +125,8 @@ export async function buildConfig(): Promise<AppConfig> {
       ...(allowRawGq ? { allowRawGq: true } : {}),
     }),
     label: `server: ${server} · graph: ${graph}${branch ? ` · ${branch}` : ""}`,
+    initialLayout,
+    canPersistLayout: injected.canPersistLayout === true,
   };
 }
 
