@@ -99,9 +99,11 @@ export function loadOverrides(key: string): LayoutOverrides | null {
 }
 
 /**
- * One-time adoption of a pre-v3 arrangement: on a v3 miss, find this title's
- * newest v2 entry (keyed `v2:<title>:<cell-fingerprint>`), re-home it under
- * the stable v3 key, and delete every v2 entry for the title.
+ * One-time adoption of a pre-v3 arrangement: on a v3 miss, adopt the first
+ * non-empty v2 entry found for this title (keyed `v2:<title>:<fingerprint>`
+ * — the keys embed no timestamp, so when several exist the pick is
+ * arbitrary), re-home it under the stable v3 key, and delete every v2 entry
+ * for the title.
  */
 export function migrateV2(
   title: string,

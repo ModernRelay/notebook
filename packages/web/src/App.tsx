@@ -201,11 +201,9 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     clearOverrides(layoutKey);
   }, [layoutKey, config.initialLayout]);
   const [savingLayout, setSavingLayout] = useState(false);
-  // Save-layout outcome, announced through the same toast bridge as mutation
-  // feedback (the ToastProvider mounts inside this component's tree).
-  const [layoutNotice, setLayoutNotice] = useState<MutationFeedback | null>(
-    null,
-  );
+  // Save-layout outcome — its own notice type (success OR error), announced
+  // by a dedicated bridge (the ToastProvider mounts inside this tree).
+  const [layoutNotice, setLayoutNotice] = useState<LayoutNotice | null>(null);
   const persistLayout = useCallback(async () => {
     const effective = pruneOverrides(overrides, liveIds);
     setSavingLayout(true);
@@ -220,14 +218,13 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
       clearOverrides(layoutKey);
       setOverrides(effective);
       setLayoutNotice((prev) => ({
-        kind: "success",
         message: "Layout saved to the notebook's .layout.json",
         seq: (prev?.seq ?? 0) + 1,
       }));
     } catch (err) {
       setLayoutNotice((prev) => ({
-        kind: "success",
         message: `Layout save failed: ${err instanceof Error ? err.message : String(err)}`,
+        tone: "error",
         seq: (prev?.seq ?? 0) + 1,
       }));
     } finally {
@@ -369,7 +366,7 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     >
       <ToastProvider>
       <SuccessToastBridge feedback={snapshot.mutationFeedback} />
-      <SuccessToastBridge feedback={layoutNotice} />
+      <LayoutToastBridge notice={layoutNotice} />
       <Shell
         header={
           <div className="sticky top-0 z-30 border-b border-border bg-background">
@@ -585,6 +582,32 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
  * pre-mount success is never replayed. Errors/no-ops never reach
  * `mutationFeedback`, so this can only announce real successes.
  */
+interface LayoutNotice {
+  message: string;
+  tone?: "error";
+  seq: number;
+}
+
+/** Announces Save-layout outcomes — success or error tone — once per seq. */
+function LayoutToastBridge({
+  notice,
+}: {
+  notice: LayoutNotice | null;
+}): null {
+  const manager = useToastManager();
+  const lastSeq = React.useRef(notice?.seq ?? 0);
+  useEffect(() => {
+    if (notice !== null && notice.seq !== lastSeq.current) {
+      lastSeq.current = notice.seq;
+      manager.add({
+        title: notice.message,
+        ...(notice.tone !== undefined ? { tone: notice.tone } : {}),
+      });
+    }
+  }, [notice, manager]);
+  return null;
+}
+
 export function SuccessToastBridge({
   feedback,
 }: {

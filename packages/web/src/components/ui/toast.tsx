@@ -21,10 +21,11 @@ const LIMIT = 3;
 interface ToastItem {
   id: number;
   title: string;
+  tone?: "error";
 }
 
 interface ToastManager {
-  add: (options: { title: string }) => void;
+  add: (options: { title: string; tone?: "error" }) => void;
 }
 
 const ToastContext = createContext<ToastManager | null>(null);
@@ -54,9 +55,12 @@ export function ToastProvider({
   }, []);
 
   const add = useCallback(
-    ({ title }: { title: string }) => {
+    ({ title, tone }: { title: string; tone?: "error" }) => {
       const id = nextId.current++;
-      setToasts((prev) => [...prev.slice(-(LIMIT - 1)), { id, title }]);
+      setToasts((prev) => [
+        ...prev.slice(-(LIMIT - 1)),
+        { id, title, ...(tone !== undefined ? { tone } : {}) },
+      ]);
       timers.current.set(
         id,
         setTimeout(() => dismiss(id), TIMEOUT_MS),
@@ -84,9 +88,13 @@ export function ToastProvider({
             <div
               key={toast.id}
               role="status"
-              className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-lg"
+              className={
+                toast.tone === "error"
+                  ? "flex items-start justify-between gap-3 rounded-lg border border-destructive/50 bg-card px-4 py-3 shadow-lg"
+                  : "flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-lg"
+              }
             >
-              <p className="text-sm text-foreground">{toast.title}</p>
+              <p className={toast.tone === "error" ? "text-sm text-destructive" : "text-sm text-foreground"}>{toast.title}</p>
               <button
                 type="button"
                 aria-label="dismiss"
