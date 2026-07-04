@@ -489,3 +489,45 @@ describe("MutationSpec.invalidates", () => {
     ).toBe(false);
   });
 });
+
+describe("confirm + optimistic.remove", () => {
+  it("parses confirm: true and a custom armed label", () => {
+    expect(
+      MutationSpecSchema.safeParse({ ref: "del", confirm: true }).success,
+    ).toBe(true);
+    expect(
+      MutationSpecSchema.safeParse({ ref: "del", confirm: "Delete this task?" })
+        .success,
+    ).toBe(true);
+  });
+
+  it("rejects confirm: false — it would silently arm the guard anyway", () => {
+    expect(
+      MutationSpecSchema.safeParse({ ref: "del", confirm: false }).success,
+    ).toBe(false);
+  });
+
+  it("parses optimistic remove, set, and both; rejects empty", () => {
+    expect(
+      MutationSpecSchema.safeParse({
+        ref: "del",
+        optimistic: { remove: true },
+      }).success,
+    ).toBe(true);
+    expect(
+      MutationSpecSchema.safeParse({
+        ref: "up",
+        optimistic: { set: { status: "x" } },
+      }).success,
+    ).toBe(true);
+    expect(
+      MutationSpecSchema.safeParse({
+        ref: "up",
+        optimistic: { set: { status: "x" }, remove: true },
+      }).success,
+    ).toBe(true);
+    expect(
+      MutationSpecSchema.safeParse({ ref: "up", optimistic: {} }).success,
+    ).toBe(false);
+  });
+});

@@ -265,3 +265,79 @@ describe("Form lens (web) — create-form (form-level mutations)", () => {
     act(() => root.unmount());
   });
 });
+
+describe("Form lens (web) — create-form clears on success", () => {
+  const CLEAR_SPEC = (lastSuccessSeq?: number) =>
+    assembleLensSpec(
+      "form",
+      "Form",
+      {
+        submit_label: "Add",
+        fields: [{ name: "slug", kind: "text", required: true }],
+        mutations: [
+          { ref: "add_item", params: { slug: { $input: "slug" } } },
+        ],
+      },
+      result([]),
+      {
+        runtimeProps: {
+          runtime: {
+            cell_id: "form",
+            saving: false,
+            ...(lastSuccessSeq !== undefined
+              ? { last_success_seq: lastSuccessSeq }
+              : {}),
+          },
+        },
+      },
+    );
+
+  it("a bumped last_success_seq remounts and clears the entered value", () => {
+    const mutate = vi.fn(async () => {});
+    const { host, root, rerender } = mount(CLEAR_SPEC(), mutate);
+    const slug = host.querySelector("input") as HTMLInputElement;
+    setInputValue(slug, "c9");
+    expect(slug.value).toBe("c9");
+
+    rerender(CLEAR_SPEC(7)); // runtime reports a successful dispatch
+    const fresh = host.querySelector("input") as HTMLInputElement;
+    expect(fresh.value).toBe(""); // cleared via remount
+    act(() => root.unmount());
+  });
+
+  it("an edit-form (with a prefill row) does NOT remount on success seq", () => {
+    const mutate = vi.fn(async () => {});
+    const editSpec = (seq?: number) =>
+      assembleLensSpec(
+        "form",
+        "Form",
+        {
+          key_column: "slug",
+          fields: [
+            {
+              name: "title",
+              kind: "text",
+              mutation: { ref: "set_title", params: { t: { $input: "title" } } },
+            },
+          ],
+        },
+        result([{ slug: "t1", title: "Old" }]),
+        {
+          runtimeProps: {
+            runtime: {
+              cell_id: "form",
+              saving: false,
+              ...(seq !== undefined ? { last_success_seq: seq } : {}),
+            },
+          },
+        },
+      );
+    const { host, root, rerender } = mount(editSpec(), mutate);
+    const title = host.querySelector("input") as HTMLInputElement;
+    setInputValue(title, "Edited");
+    rerender(editSpec(9));
+    const after = host.querySelector("input") as HTMLInputElement;
+    expect(after.value).toBe("Edited"); // in-progress edit survives
+    act(() => root.unmount());
+  });
+});

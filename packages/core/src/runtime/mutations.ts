@@ -8,9 +8,11 @@ export interface OptimisticPatch {
   cellId: string;
   /** The clicked row's `id_column` value. An overlay key, NOT a graph id. */
   rowKey: string;
-  /** A column named in the action's `optimistic.set`. */
+  /** A column named in the action's `optimistic.set` (or the removal sentinel). */
   field: string;
   value: unknown;
+  /** Row-removal patch (`optimistic.remove`): hide the row while in flight. */
+  remove?: boolean;
   saving: boolean;
   error?: string;
   /**
@@ -55,10 +57,11 @@ export function cellMutations(cell: Cell): MutationSpec[] {
 
 /**
  * Build the optimistic overlay patches for an in-flight mutation from its
- * explicit `optimistic.set` block — one patch per overlaid column, keyed by
- * `(cellId, rowKey, field)`. No `optimistic` block ⇒ no overlay (pending →
- * re-read). Identity here is the row's `id_column` value (`rowKey`), a
- * view-local key — never a graph slug or node type.
+ * explicit `optimistic` block — one patch per `set` column, plus a single
+ * row-removal patch for `remove: true`, keyed by `(cellId, rowKey, field)`.
+ * No `optimistic` block ⇒ no overlay (pending → re-read). Identity here is
+ * the row's `id_column` value (`rowKey`), a view-local key — never a graph
+ * slug or node type.
  */
 export function patchesFromMutation(
   spec: MutationSpec,
@@ -67,15 +70,30 @@ export function patchesFromMutation(
   seq: number,
 ): OptimisticPatch[] {
   if (!spec.optimistic) return [];
-  return Object.entries(spec.optimistic.set).map(([field, value]) => ({
-    key: patchKey(cellId, rowKey, field),
-    cellId,
-    rowKey,
-    field,
-    value,
-    saving: true,
-    seq,
-  }));
+  const out: OptimisticPatch[] = Object.entries(spec.optimistic.set ?? {}).map(
+    ([field, value]) => ({
+      key: patchKey(cellId, rowKey, field),
+      cellId,
+      rowKey,
+      field,
+      value,
+      saving: true,
+      seq,
+    }),
+  );
+  if (spec.optimistic.remove === true) {
+    out.push({
+      key: patchKey(cellId, rowKey, "__remove__"),
+      cellId,
+      rowKey,
+      field: "__remove__",
+      value: undefined,
+      remove: true,
+      saving: true,
+      seq,
+    });
+  }
+  return out;
 }
 
 export function patchKey(cellId: string, rowKey: string, field: string): string {

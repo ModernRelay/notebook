@@ -28,6 +28,9 @@ export function ActionList({
   const actionCount = p.actions.length;
   const [focusedRow, setFocusedRow] = useState(0);
   const [focusedAction, setFocusedAction] = useState(0);
+  // Inline destructive guard: `row:action` armed by the first Enter; the
+  // second fires. Escape or moving focus disarms.
+  const [armed, setArmed] = useState<string | null>(null);
 
   // Cell-level focus from Ink. Only intercept keys when the user has
   // tabbed into this cell; otherwise other cells'/global handlers see
@@ -38,21 +41,29 @@ export function ActionList({
     (input, key) => {
       if (!cellFocused) return;
 
+      if (key.escape) {
+        setArmed(null);
+        return;
+      }
       if (key.upArrow) {
+        setArmed(null);
         setFocusedRow((r) => (total > 0 ? (r - 1 + total) % total : 0));
         return;
       }
       if (key.downArrow) {
+        setArmed(null);
         setFocusedRow((r) => (total > 0 ? (r + 1) % total : 0));
         return;
       }
       if (key.leftArrow) {
+        setArmed(null);
         setFocusedAction(
           (a) => (a - 1 + actionCount) % Math.max(1, actionCount),
         );
         return;
       }
       if (key.rightArrow) {
+        setArmed(null);
         setFocusedAction((a) => (a + 1) % Math.max(1, actionCount));
         return;
       }
@@ -61,6 +72,16 @@ export function ActionList({
         const act = p.actions[focusedAction];
         if (!row || !act) return;
         const id = String(row[p.id_column] ?? "");
+        // Destructive guard: first Enter arms ([ Confirm? ]), second fires.
+        // Keyed by the row's stable id (not its index) so a background
+        // re-read reordering rows can never fire the confirm on a
+        // different row than the one that was armed.
+        const armKey = `${id}:${focusedAction}`;
+        if (act.mutation?.confirm !== undefined && armed !== armKey) {
+          setArmed(armKey);
+          return;
+        }
+        setArmed(null);
         if (process.env.OMNIGRAPH_TUI_DEBUG) {
           process.stderr.write(
             `[debug] ActionList press: row=${focusedRow} action=${focusedAction} id=${id}\n`,
@@ -157,18 +178,31 @@ export function ActionList({
             )}
             {isRowFocused && (
               <Box marginLeft={4}>
-                {p.actions.map((act, aIdx) => (
-                  <Text
-                    key={`${aIdx}-${act.action ?? "mutate"}`}
-                    color={
-                      aIdx === focusedAction ? variantColor(act.variant) : undefined
-                    }
-                    bold={aIdx === focusedAction}
-                  >
-                    {aIdx === focusedAction ? "▶" : " "}[ {act.label} ]
-                    {aIdx < p.actions.length - 1 ? "  " : ""}
-                  </Text>
-                ))}
+                {p.actions.map((act, aIdx) => {
+                  const isArmed = armed === `${id}:${aIdx}`;
+                  const label = isArmed
+                    ? typeof act.mutation?.confirm === "string"
+                      ? act.mutation.confirm
+                      : "Confirm?"
+                    : act.label;
+                  return (
+                    <Text
+                      key={`${aIdx}-${act.action ?? "mutate"}`}
+                      color={
+                        isArmed
+                          ? "red"
+                          : aIdx === focusedAction
+                            ? variantColor(act.variant)
+                            : undefined
+                      }
+                      bold={aIdx === focusedAction}
+                    >
+                      {aIdx === focusedAction ? "▶" : " "}[ {label} ]
+                      {isArmed ? " (Esc cancels)" : ""}
+                      {aIdx < p.actions.length - 1 ? "  " : ""}
+                    </Text>
+                  );
+                })}
               </Box>
             )}
           </Box>

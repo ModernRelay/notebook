@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useActions, useStateStore } from "@json-render/react";
 import {
   readStatePointer,
@@ -45,8 +45,24 @@ export function Button({
   const ready = useAllSet(p.requires ?? []);
   // A mutation button is disabled while saving or until its inputs are set.
   const disabled = Boolean(p.mutation) && (saving || !ready);
+  // Inline destructive guard (mutation.confirm): first click arms, second
+  // fires; auto-disarms after 4s so an armed button can't linger.
+  const confirm = p.mutation?.confirm;
+  const [armed, setArmed] = useState(false);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disarm = (): void => {
+    if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    disarmTimer.current = null;
+    setArmed(false);
+  };
+  useEffect(
+    () => () => {
+      if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    },
+    [],
+  );
 
-  const onClick = (): void => {
+  const fire = (): void => {
     if (p.mutation) {
       // Non-row write. json-render has already resolved any { $state } in
       // p.mutation.params to current values (props resolve at render); the
@@ -60,18 +76,47 @@ export function Button({
       emit("press");
     }
   };
+  const onClick = (): void => {
+    if (confirm !== undefined && !armed) {
+      if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+      disarmTimer.current = setTimeout(() => setArmed(false), 4000);
+      setArmed(true);
+      return;
+    }
+    disarm();
+    fire();
+  };
+  const label = armed
+    ? typeof confirm === "string"
+      ? confirm
+      : "Confirm?"
+    : p.label;
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
-      <CossButton
-        type="button"
-        variant={VARIANT[p.variant ?? "default"]}
-        size="sm"
-        disabled={disabled}
-        onClick={onClick}
-      >
-        {saving ? "Saving…" : p.label}
-      </CossButton>
+      <div className="flex items-center gap-2">
+        <CossButton
+          type="button"
+          variant={VARIANT[p.variant ?? "default"]}
+          size="sm"
+          disabled={disabled}
+          aria-live={confirm !== undefined ? "polite" : undefined}
+          onClick={onClick}
+        >
+          {saving ? "Saving…" : label}
+        </CossButton>
+        {armed && (
+          <CossButton
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="cancel"
+            onClick={disarm}
+          >
+            ✕
+          </CossButton>
+        )}
+      </div>
       {p.runtime?.error !== undefined && !saving && (
         <p className="text-xs text-warning" role="alert">
           ⚠ {p.runtime.error}

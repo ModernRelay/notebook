@@ -12,7 +12,9 @@ graph: tasks
 # only the cells whose query.ref is in the mutation's `invalidates` list (plus the
 # originating cell); a mutation without `invalidates` falls back to re-read-all
 # (see raw_approve). Success shows a toast with rows-affected; a write that
-# matches no rows rolls back its optimistic overlay and warns inline.
+# matches no rows rolls back its optimistic overlay and warns inline. Destructive
+# mutations declare `confirm` (two-step inline arm-then-fire) and deletes use
+# `optimistic: { remove: true }` — the row hides while in flight, restored on failure.
 #
 # The @key field is `slug` (`id` is reserved by the storage layer); columns label it "ID".
 # Bootstrap the graph first:  scripts/server-demo-s3.sh --serve
@@ -44,6 +46,16 @@ cells:
             params: { slug: { $row: slug } }
             optimistic: { set: { status: rejected } }
             invalidates: [tasks_in_review, tasks_by_status, all_tasks, get_task]
+        - label: Delete
+          variant: danger
+          mutation:
+            ref: del_task
+            params: { slug: { $row: slug } }
+            confirm: Delete this task?
+            optimistic: { remove: true }
+            # A node delete cascades the task's edges too.
+            invalidates: [tasks_in_review, tasks_by_status, all_tasks, get_task,
+                          task_assignees, task_comments]
 
   # Drafts → Start review (exercises start_review). Approving here is intentionally
   # absent: a draft moves to review first.
@@ -201,6 +213,18 @@ cells:
               task: { $state: /selectedTask }
               reviewer: { $state: /selectedReviewer }
             invalidates: [task_assignees]
+      # Edge delete: removes ALL AssignedTo edges from the selected task.
+      - lens: Button
+        props:
+          label: Unassign all
+          variant: danger
+          requires: [/selectedTask]
+          mutation:
+            ref: unassign_task
+            params:
+              task: { $state: /selectedTask }
+            confirm: Remove ALL assignments for this task?
+            invalidates: [task_assignees]
     props:
       columns:
         - { key: name, label: Assigned reviewer }
@@ -266,15 +290,24 @@ cells:
 
   - id: comment_list
     tab: Comment / raw
-    lens: Table
+    lens: ActionList
     width: half
     query:
       ref: task_comments
       params: { slug: { $state: /selectedTask, default: t1 } }
     props:
-      columns:
-        - { key: slug, label: Comment }
-        - { key: text, label: Text, wrap: true }
+      id_column: slug
+      title_column: text
+      meta_columns: [slug]
+      actions:
+        - label: Delete
+          variant: danger
+          mutation:
+            ref: del_comment
+            params: { slug: { $row: slug } }
+            confirm: true
+            optimistic: { remove: true }
+            invalidates: [task_comments]
 
   # rawGq escape hatch — inline .gq, no catalog ref. Approves the selected task.
   - id: raw_approve

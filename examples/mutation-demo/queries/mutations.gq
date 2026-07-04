@@ -51,3 +51,19 @@ query add_comment($slug: String, $text: String) {
 query link_comment($comment: String, $task: String) {
     insert CommentedOn { from: $comment, to: $task }
 }
+
+// ── Deletes ──────────────────────────────────────────
+// Node deletes cascade their connected edges; an edge delete removes ALL
+// edges of that type from the source node.
+
+query del_task($slug: String) {
+    delete Task where slug = $slug
+}
+
+query del_comment($slug: String) {
+    delete Comment where slug = $slug
+}
+
+query unassign_task($task: String) {
+    delete AssignedTo where from = $task
+}
