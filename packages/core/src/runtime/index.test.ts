@@ -1883,7 +1883,38 @@ describe("{$now} param marker", () => {
     const params = seen as Record<string, unknown> | null;
     expect(params?.at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(params?.ts).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
-    expect((params?.ts as string).startsWith(params?.at as string)).toBe(true);
+    // `at` is the LOCAL calendar date — matches today or datetime's UTC date
+    // (they differ only around midnight across the tz offset).
+    const local = new Date();
+    const expectLocal = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
+    expect(params?.at).toBe(expectLocal);
+    runtime.dispose();
+  });
+});
+
+describe("{$now} typo guard", () => {
+  it("an unrecognized $now value resolves to undefined (server rejects, not a wrong date)", async () => {
+    let seen: Record<string, unknown> | null = null;
+    const source = fakeSource({
+      mutate: async (command) => {
+        seen = command.resolvedParams;
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const notebook: Notebook = {
+      version: 1,
+      title: "Now",
+      cells: [{ id: "b", lens: "Button", props: { label: "Go", mutation: { ref: "m" } } }],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: { ref: "m", params: { at: { $now: "Date" } } },
+        __cell_id: "b",
+      },
+    });
+    expect((seen as Record<string, unknown> | null)?.at).toBeUndefined();
     runtime.dispose();
   });
 });
