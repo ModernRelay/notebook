@@ -166,6 +166,24 @@ function resolveExpr(
     const field = (value as { $input: unknown }).$input;
     return typeof field === "string" ? input[field] : undefined;
   }
+  if ("$now" in value) {
+    // Dispatch-time timestamp: { $now: date } → the LOCAL calendar date
+    // "YYYY-MM-DD" (a dashboard's "today" is the user's wall clock, not
+    // UTC); { $now: datetime } → full ISO 8601 (an instant — UTC is fine).
+    // Optional `offset_days` shifts the instant (e.g. -60 → sixty days ago)
+    // for threshold params like "updated before". Anything else (a typo like
+    // "Date") resolves to undefined so the server's required-param check
+    // surfaces the mistake instead of a subtly wrong value.
+    const marker = value as { $now: unknown; offset_days?: unknown };
+    if (marker.$now !== "date" && marker.$now !== "datetime") return undefined;
+    const offsetDays =
+      typeof marker.offset_days === "number" ? marker.offset_days : 0;
+    const d = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+    if (marker.$now === "datetime") return d.toISOString();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
   if ("$state" in value) {
     const obj = value as { $state: unknown; default?: unknown };
     if (typeof obj.$state !== "string") return undefined;

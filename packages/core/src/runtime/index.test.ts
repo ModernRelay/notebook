@@ -1854,3 +1854,99 @@ describe("Form picker option reads", () => {
     expect([...targets]).toEqual(["form"]);
   });
 });
+
+describe("{$now} param marker", () => {
+  it("resolves date and datetime forms at dispatch", async () => {
+    let seen: Record<string, unknown> | null = null;
+    const source = fakeSource({
+      mutate: async (command) => {
+        seen = command.resolvedParams;
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const notebook: Notebook = {
+      version: 1,
+      title: "Now",
+      cells: [{ id: "b", lens: "Button", props: { label: "Go", mutation: { ref: "m" } } }],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: {
+          ref: "m",
+          params: { at: { $now: "date" }, ts: { $now: "datetime" } },
+        },
+        __cell_id: "b",
+      },
+    });
+    const params = seen as Record<string, unknown> | null;
+    expect(params?.at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(params?.ts).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+    // `at` is the LOCAL calendar date — matches today or datetime's UTC date
+    // (they differ only around midnight across the tz offset).
+    const local = new Date();
+    const expectLocal = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
+    expect(params?.at).toBe(expectLocal);
+    runtime.dispose();
+  });
+});
+
+describe("{$now} typo guard", () => {
+  it("an unrecognized $now value resolves to undefined (server rejects, not a wrong date)", async () => {
+    let seen: Record<string, unknown> | null = null;
+    const source = fakeSource({
+      mutate: async (command) => {
+        seen = command.resolvedParams;
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const notebook: Notebook = {
+      version: 1,
+      title: "Now",
+      cells: [{ id: "b", lens: "Button", props: { label: "Go", mutation: { ref: "m" } } }],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: { ref: "m", params: { at: { $now: "Date" } } },
+        __cell_id: "b",
+      },
+    });
+    expect((seen as Record<string, unknown> | null)?.at).toBeUndefined();
+    runtime.dispose();
+  });
+});
+
+describe("{$now} offset_days", () => {
+  it("shifts the resolved date by the offset", async () => {
+    let seen: Record<string, unknown> | null = null;
+    const source = fakeSource({
+      mutate: async (command) => {
+        seen = command.resolvedParams;
+        return { kind: "ok", affected: { nodes: 1, edges: 0 } };
+      },
+    });
+    const notebook: Notebook = {
+      version: 1,
+      title: "Now",
+      cells: [{ id: "b", lens: "Button", props: { label: "Go", mutation: { ref: "m" } } }],
+    };
+    const runtime = createNotebookRuntime({ notebook, source });
+    await waitFor(runtime, (s) => s.status === "ready");
+    await runtime.dispatch("mutate", {
+      params: {
+        spec: { ref: "m", params: { before: { $now: "date", offset_days: -60 } } },
+        __cell_id: "b",
+      },
+    });
+    const before = (seen as Record<string, unknown> | null)?.before as string;
+    expect(before).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const deltaDays =
+      (Date.now() - new Date(before).getTime()) / (24 * 60 * 60 * 1000);
+    expect(deltaDays).toBeGreaterThan(59);
+    expect(deltaDays).toBeLessThan(62);
+    runtime.dispose();
+  });
+});

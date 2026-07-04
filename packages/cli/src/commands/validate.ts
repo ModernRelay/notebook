@@ -419,6 +419,10 @@ function literalForValidation(
   if (isRecord(value) && "$input" in value) {
     return { kind: "dynamic", source: "input" };
   }
+  // `{ $now }` resolves to the dispatch-time date — always present.
+  if (isRecord(value) && "$now" in value) {
+    return { kind: "dynamic", source: "input" };
+  }
   if (isRecord(value) && "$state" in value) {
     return "default" in value
       ? { kind: "literal", value: value.default }
@@ -437,6 +441,7 @@ function containsStateExpr(value: unknown): boolean {
     "$state" in record ||
     "$row" in record ||
     "$input" in record ||
+    "$now" in record ||
     Object.values(record).some(containsStateExpr)
   );
 }
