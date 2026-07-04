@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
@@ -49,6 +49,11 @@ export interface ServeOptions {
 export async function serve(opts: ServeOptions): Promise<void> {
   const webDist = resolveWebDist();
   const upstream = new URL(opts.connection.server);
+  // Layout sidecar: <notebook minus .yaml>.layout.json, beside the notebook —
+  // written by PUT /layout ("Save layout" in the UI), read fresh per page load
+  // so external edits/git pulls apply on reload. Git-committable.
+  const sidecarPath =
+    opts.notebookPath.replace(/\.ya?ml$/i, "") + ".layout.json";
 
   // Config injected into index.html as `window.__DASHBOOK__`, so the bare URL
   // (http://host:port/) loads the served notebook over the same-origin `/og`
@@ -85,6 +90,19 @@ export async function serve(opts: ServeOptions): Promise<void> {
       sendFile(res, opts.notebookPath, ".yaml");
       return;
     }
+    // 2b. layout sidecar persistence (local file I/O — never proxied)
+    if (path === "/layout") {
+      if (req.method !== "PUT") {
+        res.writeHead(405, {
+          "content-type": "text/plain; charset=utf-8",
+          allow: "PUT",
+        });
+        res.end("405 Method Not Allowed");
+        return;
+      }
+      receiveLayout(req, res, sidecarPath);
+      return;
+    }
     // 3. real static files under web-dist (never index.html — that's injected)
     const staticPath = safeJoin(webDist, path);
     if (
@@ -96,8 +114,19 @@ export async function serve(opts: ServeOptions): Promise<void> {
       sendFile(res, staticPath, extname(staticPath));
       return;
     }
-    // 4. SPA fallback — index.html with the view config injected.
-    sendIndex(res, join(webDist, "index.html"), viewConfig);
+    // 4. SPA fallback — index.html with the view config injected. The sidecar
+    // rides the injection (read per request, so a reload picks up external
+    // edits) and canPersistLayout tells the SPA the Save-layout PUT exists.
+    const config: Record<string, unknown> = {
+      ...viewConfig,
+      canPersistLayout: true,
+    };
+    try {
+      config.layout = JSON.parse(readFileSync(sidecarPath, "utf8")) as unknown;
+    } catch {
+      /* no sidecar yet, or unreadable/garbage — the SPA validates anyway */
+    }
+    sendIndex(res, join(webDist, "index.html"), config);
   });
 
   await new Promise<void>((resolvePromise, reject) => {
@@ -154,6 +183,55 @@ function sendIndex(
 
 function buildOpenUrl(port: number): string {
   return `http://127.0.0.1:${port}/`;
+}
+
+/** Max accepted layout-sidecar body — far above any real notebook's overrides. */
+const LAYOUT_BODY_LIMIT = 256 * 1024;
+
+/**
+ * PUT /layout: collect the JSON body (size-capped), validate it parses, and
+ * pretty-print it to the sidecar so the file diffs cleanly under git.
+ */
+function receiveLayout(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  sidecarPath: string,
+): void {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  let aborted = false;
+  req.on("data", (chunk: Buffer) => {
+    if (aborted) return;
+    size += chunk.length;
+    if (size > LAYOUT_BODY_LIMIT) {
+      aborted = true;
+      res.writeHead(413, { "content-type": "text/plain; charset=utf-8" });
+      res.end("413 Payload Too Large");
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on("end", () => {
+    if (aborted) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end("400 Bad Request: body must be JSON");
+      return;
+    }
+    try {
+      writeFileSync(sidecarPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    } catch (err) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(`500 could not write layout sidecar: ${String(err)}`);
+      return;
+    }
+    res.writeHead(204);
+    res.end();
+  });
 }
 
 function sendFile(res: http.ServerResponse, file: string, ext: string): void {
