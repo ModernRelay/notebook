@@ -181,6 +181,12 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
     () => new Set(config.notebook.cells.map((c) => c.id)),
     [config.notebook],
   );
+  // The committed baseline (the sidecar's contents) — seeded from the page
+  // load and ADVANCED on every successful save, so Reset always falls back to
+  // the latest saved arrangement, not the page-load snapshot.
+  const [committedLayout, setCommittedLayout] = useState<LayoutOverrides | null>(
+    config.initialLayout,
+  );
   const [overrides, setOverrides] = useState<LayoutOverrides>(() => {
     const local =
       loadOverrides(layoutKey) ?? migrateV2(config.notebook.title, liveIds);
@@ -197,9 +203,9 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
   const resetLayout = useCallback(() => {
     // Drop the personal layer only — the committed sidecar (if any) remains
     // the base. Removing a committed arrangement = delete the sidecar file.
-    setOverrides(config.initialLayout ?? EMPTY_OVERRIDES);
+    setOverrides(committedLayout ?? EMPTY_OVERRIDES);
     clearOverrides(layoutKey);
-  }, [layoutKey, config.initialLayout]);
+  }, [layoutKey, committedLayout]);
   const [savingLayout, setSavingLayout] = useState(false);
   // Save-layout outcome — its own notice type (success OR error), announced
   // by a dedicated bridge (the ToastProvider mounts inside this tree).
@@ -214,9 +220,11 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
         body: JSON.stringify({ version: 1, ...effective }),
       });
       if (!res.ok) throw new Error(`PUT /layout returned ${res.status}`);
-      // Disk is now the base — clear the personal layer, keep the canvas as-is.
+      // Disk is now the base — clear the personal layer, keep the canvas
+      // as-is, and advance the committed baseline Reset falls back to.
       clearOverrides(layoutKey);
       setOverrides(effective);
+      setCommittedLayout(effective);
       setLayoutNotice((prev) => ({
         message: "Layout saved to the notebook's .layout.json",
         seq: (prev?.seq ?? 0) + 1,
