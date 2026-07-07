@@ -25,7 +25,7 @@
   "dependencies": {
     "@json-render/core": "^0.19.0",
     "@json-render/ink": "^0.19.0",
-    "@modernrelay/omnigraph": "^0.7.0",
+    "@modernrelay/omnigraph": "^0.8.0",
     "ink": "^6.0.0",
     "react": "^19.2.6",
     "yaml": "^2.8.4",

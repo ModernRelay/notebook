@@ -24,7 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modernrelay/omnigraph": "^0.7.0",
+    "@modernrelay/omnigraph": "^0.8.0",
     "@modernrelay/notebook-core": "workspace:*",
     "yaml": "^2.8.4"
   },
