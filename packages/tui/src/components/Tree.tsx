@@ -21,7 +21,7 @@ interface VisibleLine {
 /** Flatten the expanded forest into display lines with box-drawing prefixes. */
 function visibleLines(
   nodes: TreeNode[],
-  expanded: ReadonlySet<string>,
+  isOpen: (node: TreeNode) => boolean,
   ancestors = "",
 ): VisibleLine[] {
   const out: VisibleLine[] = [];
@@ -29,9 +29,9 @@ function visibleLines(
     const last = index === nodes.length - 1;
     const branch = node.depth === 0 ? "" : last ? "└─ " : "├─ ";
     out.push({ node, prefix: ancestors + branch });
-    if (node.children.length > 0 && expanded.has(node.path)) {
+    if (node.children.length > 0 && isOpen(node)) {
       const carry = node.depth === 0 ? "" : last ? "   " : "│  ";
-      out.push(...visibleLines(node.children, expanded, ancestors + carry));
+      out.push(...visibleLines(node.children, isOpen, ancestors + carry));
     }
   });
   return out;
@@ -50,25 +50,19 @@ export function Tree({
   const { isFocused } = useFocus({ autoFocus: selectable });
   const selected = useStateValue<string>(p.select_state ?? "/__never__");
   const forest = useMemo(() => buildForest(p.rows, p.levels), [p.rows, p.levels]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const open = new Set<string>();
-    const walk = (nodes: TreeNode[]): void => {
-      for (const node of nodes) {
-        if (
-          node.children.length > 0 &&
-          (p.expand_depth === undefined || node.depth < p.expand_depth)
-        ) {
-          open.add(node.path);
-        }
-        walk(node.children);
-      }
-    };
-    walk(forest);
-    return open;
-  });
+  // Default policy + explicit user toggles (survives query re-reads; new
+  // paths from refreshed rows get the expand_depth default).
+  const defaultOpen = (node: TreeNode): boolean =>
+    node.children.length > 0 &&
+    (p.expand_depth === undefined || node.depth < p.expand_depth);
+  const [userToggled, setUserToggled] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
+  const isOpen = (node: TreeNode): boolean =>
+    userToggled.get(node.path) ?? defaultOpen(node);
   const [cursor, setCursor] = useState(0);
 
-  const lines = visibleLines(forest, expanded);
+  const lines = visibleLines(forest, isOpen);
   const total = lines.length;
 
   useInput(
@@ -78,13 +72,9 @@ export function Tree({
       if (key.upArrow) setCursor((c) => (c - 1 + total) % total);
       else if (key.downArrow) setCursor((c) => (c + 1) % total);
       else if (key.leftArrow && line) {
-        setExpanded((prev) => {
-          const next = new Set(prev);
-          next.delete(line.node.path);
-          return next;
-        });
+        setUserToggled((prev) => new Map(prev).set(line.node.path, false));
       } else if (key.rightArrow && line && line.node.children.length > 0) {
-        setExpanded((prev) => new Set(prev).add(line.node.path));
+        setUserToggled((prev) => new Map(prev).set(line.node.path, true));
       } else if ((key.return || input === " ") && line && selectable) {
         actions.execute({
           action: "setState",
@@ -116,7 +106,7 @@ export function Tree({
         const isSelected = selectable && line.node.key === selected;
         const hasChildren = line.node.children.length > 0;
         const disclosure = hasChildren
-          ? expanded.has(line.node.path)
+          ? isOpen(line.node)
             ? "▾ "
             : "▸ "
           : "";

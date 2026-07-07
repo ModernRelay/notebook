@@ -41,18 +41,25 @@ function treeSpec(extra: Record<string, unknown> = {}) {
   );
 }
 
-function mount(spec: ReturnType<typeof treeSpec>): { host: HTMLDivElement; root: Root } {
+function mount(spec: ReturnType<typeof treeSpec>): {
+  host: HTMLDivElement;
+  root: Root;
+  rerender: (s: ReturnType<typeof treeSpec>) => void;
+} {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  act(() => {
-    root.render(
-      <JSONUIProvider registry={webRegistry} initialState={{}} handlers={{}}>
-        <Renderer spec={spec} registry={webRegistry} />
-      </JSONUIProvider>,
-    );
-  });
-  return { host, root };
+  const render = (s: ReturnType<typeof treeSpec>): void => {
+    act(() => {
+      root.render(
+        <JSONUIProvider registry={webRegistry} initialState={{}} handlers={{}}>
+          <Renderer spec={s} registry={webRegistry} />
+        </JSONUIProvider>,
+      );
+    });
+  };
+  render(spec);
+  return { host, root, rerender: render };
 }
 
 afterEach(() => {
@@ -110,6 +117,41 @@ describe("Tree lens (web)", () => {
       (s) => s.textContent === "Systems",
     )!;
     expect(systems.className).not.toContain("bg-accent");
+    act(() => root.unmount());
+  });
+
+  it("re-read rows keep the default-open policy for NEW branches; user toggles survive", () => {
+    const { host, root, rerender } = mount(treeSpec());
+    // user collapses Systems
+    act(() => {
+      Array.from(host.querySelectorAll("button"))
+        .find((b) => b.getAttribute("aria-label") === "Collapse Systems")!
+        .click();
+    });
+    expect(host.textContent).not.toContain("Chunking");
+    // a background re-read adds a brand-new domain
+    const grown = assembleLensSpec(
+      "tree",
+      "Tree",
+      {
+        levels: [
+          { key: "d", label: "dn" },
+          { key: "c", label: "cn" },
+          { key: "r", label: "rn" },
+        ],
+        select_state: "/selected",
+      },
+      result([
+        ...ROWS,
+        { d: "phys", dn: "Physics", c: "entropy", cn: "Entropy", r: "attr", rn: "Attractors" },
+      ]),
+    );
+    rerender(grown);
+    // the NEW domain follows the default policy (open — no expand_depth set)
+    expect(host.textContent).toContain("Physics");
+    expect(host.textContent).toContain("Entropy");
+    // the user's explicit collapse of Systems SURVIVES the re-read
+    expect(host.textContent).not.toContain("Chunking");
     act(() => root.unmount());
   });
 

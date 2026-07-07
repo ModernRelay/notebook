@@ -27,31 +27,20 @@ export function Tree({
     () => buildForest(p.rows, p.levels),
     [p.rows, p.levels],
   );
-  // Expanded node paths. Default: everything with children starts open;
-  // expand_depth N opens only nodes at depth < N (0 = fully collapsed).
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const open = new Set<string>();
-    const walk = (nodes: TreeNode[]): void => {
-      for (const node of nodes) {
-        if (
-          node.children.length > 0 &&
-          (p.expand_depth === undefined || node.depth < p.expand_depth)
-        ) {
-          open.add(node.path);
-        }
-        walk(node.children);
-      }
-    };
-    walk(forest);
-    return open;
-  });
-  const toggle = (path: string): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+  // Disclosure = default policy + explicit user toggles. Deriving the default
+  // per node (instead of materializing a set once) keeps re-read forests
+  // correct: new paths get the expand_depth default; the user's explicit
+  // opens/closes survive by path identity.
+  const defaultOpen = (node: TreeNode): boolean =>
+    node.children.length > 0 &&
+    (p.expand_depth === undefined || node.depth < p.expand_depth);
+  const [userToggled, setUserToggled] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
+  const isOpen = (node: TreeNode): boolean =>
+    userToggled.get(node.path) ?? defaultOpen(node);
+  const toggle = (node: TreeNode): void => {
+    setUserToggled((prev) => new Map(prev).set(node.path, !isOpen(node)));
   };
 
   if (forest.length === 0) {
@@ -67,7 +56,7 @@ export function Tree({
 
   const renderNode = (node: TreeNode): React.ReactElement => {
     const hasChildren = node.children.length > 0;
-    const isOpen = expanded.has(node.path);
+    const open = isOpen(node);
     const isSelected = selectable && node.key === selected;
     return (
       <li key={node.path}>
@@ -75,12 +64,12 @@ export function Tree({
           {hasChildren ? (
             <button
               type="button"
-              aria-expanded={isOpen}
-              aria-label={`${isOpen ? "Collapse" : "Expand"} ${node.label}`}
-              onClick={() => toggle(node.path)}
+              aria-expanded={open}
+              aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`}
+              onClick={() => toggle(node)}
               className="w-4 shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
-              {isOpen ? "▾" : "▸"}
+              {open ? "▾" : "▸"}
             </button>
           ) : (
             <span className="w-4 shrink-0" aria-hidden />
@@ -110,7 +99,7 @@ export function Tree({
             </Badge>
           )}
         </div>
-        {hasChildren && isOpen && (
+        {hasChildren && open && (
           <ul className="ml-4 border-l border-border pl-2">
             {node.children.map(renderNode)}
           </ul>
