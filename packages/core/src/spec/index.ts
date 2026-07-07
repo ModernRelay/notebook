@@ -4,6 +4,7 @@ import { parse as parseYaml } from "yaml";
 /** Data-bearing lenses (cells with a query; Form's query is optional — prefill). */
 export const LensKind = z.enum([
   "Table",
+  "Tree",
   "Subgraph",
   "Path",
   "ActionList",
@@ -28,6 +29,7 @@ export type ControlKind = z.infer<typeof ControlKind>;
 /** Any cell type. */
 export const ComponentKind = z.enum([
   "Table",
+  "Tree",
   "Subgraph",
   "Path",
   "ActionList",

@@ -2,6 +2,7 @@ import { defineCatalog } from "@json-render/core";
 import { schema, defineRegistry } from "@json-render/ink";
 import { lensActions, lensComponents } from "@modernrelay/notebook-core";
 import { Table } from "./components/Table.js";
+import { Tree } from "./components/Tree.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";
 import { ActionList } from "./components/ActionList.js";
@@ -22,7 +23,8 @@ const catalog = defineCatalog(schema, {
 });
 
 const { registry: inkRegistry } = defineRegistry(catalog, {
-  components: { Table, Path, Subgraph, ActionList, Form, Timeline, Card, Quote, Text, Button, Toggle, Select, TextInput, NumberInput },
+  components: { Table,
+    Tree, Path, Subgraph, ActionList, Form, Timeline, Card, Quote, Text, Button, Toggle, Select, TextInput, NumberInput },
   actions: {
     setState: async (params, setState) => {
       const { statePath, value } = params as { statePath: string; value: unknown };
