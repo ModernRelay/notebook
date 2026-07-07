@@ -14,6 +14,8 @@ export interface TableDelta {
   /** Base table version (undefined when the table is new on the branch). */
   fromVersion: number | undefined;
   toVersion: number;
+  /** True when the table exists on the base but is GONE on the branch. */
+  removed?: boolean;
   /**
    * True when the numbers alone would say "equal" but the table was last
    * written by a DIFFERENT lineage — versions are per-lineage counters, so
@@ -47,6 +49,20 @@ export function computeTableDeltas(
       fromVersion: before?.version,
       toVersion: t.version,
       diverged: numbersEqual && !writersEqual,
+    });
+  }
+  // Base-only tables (present on base, gone on the branch) are staged
+  // removals — they must appear in the summary, not vanish from it.
+  const branchKeys = new Set(branch.tables.map((t) => t.table_key));
+  for (const t of base.tables) {
+    if (branchKeys.has(t.table_key)) continue;
+    deltas.push({
+      table: t.table_key,
+      rowDelta: -t.row_count,
+      fromVersion: t.version,
+      toVersion: t.version,
+      diverged: false,
+      removed: true,
     });
   }
   return deltas.sort((a, b) => a.table.localeCompare(b.table));

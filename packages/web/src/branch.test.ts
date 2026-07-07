@@ -47,6 +47,17 @@ describe("computeTableDeltas", () => {
     expect(computeTableDeltas(a, b)).toEqual([]);
   });
 
+  it("reports base-only tables as staged removals (union, not branch-only)", () => {
+    const base = snap("main", [
+      ["node:Task", 14, 10],
+      ["node:Comment", 8, 3],
+    ]);
+    const branch = snap("stage", [["node:Task", 14, 10]]);
+    expect(computeTableDeltas(base, branch)).toEqual([
+      { table: "node:Comment", rowDelta: -3, fromVersion: 8, toVersion: 8, diverged: false, removed: true },
+    ]);
+  });
+
   it("flags DIVERGED lineages: same version+rows but a different writer", () => {
     // Versions are per-lineage counters — two branches that each made one
     // edit to the same table collide numerically while contents differ.

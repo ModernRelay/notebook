@@ -294,7 +294,11 @@ export function BranchBar({
                             <span className="font-mono">{tableDisplayName(d.table)}</span>
                             <span className="flex items-center gap-2">
                               <Badge variant="outline">
-                                {d.diverged ? "diverged" : rowDeltaLabel(d.rowDelta)}
+                                {d.removed
+                                  ? "removed"
+                                  : d.diverged
+                                    ? "diverged"
+                                    : rowDeltaLabel(d.rowDelta)}
                               </Badge>
                               <span className="text-xs text-muted-foreground tabular-nums">
                                 {d.diverged
