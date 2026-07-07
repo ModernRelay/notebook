@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   assembleLensSpec,
+  buildForest,
   lensComponents,
   type QueryResult,
 } from "./index.js";
@@ -17,7 +18,7 @@ const fakeResult: QueryResult = {
 };
 
 describe("lensComponents", () => {
-  it("registers all fourteen components (9 lenses + 5 controls)", () => {
+  it("registers all fifteen components (10 lenses + 5 controls)", () => {
     expect(Object.keys(lensComponents).sort()).toEqual([
       "ActionList",
       "Button",
@@ -33,6 +34,7 @@ describe("lensComponents", () => {
       "TextInput",
       "Timeline",
       "Toggle",
+      "Tree",
     ]);
   });
 
@@ -292,5 +294,81 @@ describe("Form picker field schema", () => {
         fakeResult,
       ),
     ).toThrow(/require kind: picker/);
+  });
+});
+
+describe("Tree lens", () => {
+  it("builds a Tree spec with rows merged in", () => {
+    const spec = assembleLensSpec(
+      "t1",
+      "Tree",
+      {
+        levels: [
+          { key: "d.slug", label: "d.name" },
+          { key: "c.slug", label: "c.name" },
+        ],
+        select_state: "/selected",
+      },
+      fakeResult,
+    );
+    expect(spec.elements["t1"]?.type).toBe("Tree");
+    expect((spec.elements["t1"]?.props as { rows: unknown[] }).rows).toEqual(
+      fakeResult.rows,
+    );
+  });
+
+  it("rejects fewer than two levels", () => {
+    expect(() =>
+      assembleLensSpec("t1", "Tree", { levels: [{ key: "d.slug" }] }, fakeResult),
+    ).toThrow();
+  });
+});
+
+describe("buildForest", () => {
+  const LEVELS = [
+    { key: "d", label: "dn" },
+    { key: "c", label: "cn" },
+    { key: "r", label: "rn" },
+  ];
+
+  it("groups shared prefixes, dedupes, keeps first-seen order and labels", () => {
+    const rows = [
+      { d: "sys", dn: "Systems", c: "loop", cn: "Feedback loops", r: "attr", rn: "Attractors" },
+      { d: "sys", dn: "Systems", c: "loop", cn: "Feedback loops", r: "emer", rn: "Emergence" },
+      { d: "sys", dn: "Systems", c: "chunk", cn: "Chunking", r: "attr", rn: "Attractors" },
+      { d: "cog", dn: "Cognitive", c: "bias", cn: "Bias", r: "loop", rn: "Feedback loops" },
+      // duplicate full path — must not duplicate nodes
+      { d: "sys", dn: "Systems", c: "loop", cn: "Feedback loops", r: "attr", rn: "Attractors" },
+    ];
+    const forest = buildForest(rows, LEVELS);
+    expect(forest.map((n) => n.label)).toEqual(["Systems", "Cognitive"]);
+    const sys = forest[0]!;
+    expect(sys.children.map((n) => n.label)).toEqual(["Feedback loops", "Chunking"]);
+    expect(sys.children[0]!.children.map((n) => n.label)).toEqual([
+      "Attractors",
+      "Emergence",
+    ]);
+    // same key under different parents = distinct nodes with distinct paths
+    const cogLoop = forest[1]!.children[0]!.children[0]!;
+    expect(cogLoop.key).toBe("loop");
+    expect(cogLoop.path).not.toBe(sys.children[0]!.path);
+    expect(cogLoop.depth).toBe(2);
+  });
+
+  it("truncates sparse paths at the first empty level and falls back to key as label", () => {
+    const rows = [
+      { d: "sys", dn: "Systems", c: "solo", cn: null, r: null, rn: null },
+      { d: "sys", dn: "Systems", c: "", cn: "ignored" },
+      { d: "lonely" }, // level-1-only row, no label column value
+    ];
+    const forest = buildForest(rows, LEVELS);
+    expect(forest.map((n) => n.label)).toEqual(["Systems", "lonely"]);
+    const solo = forest[0]!.children[0]!;
+    expect(solo.label).toBe("solo"); // null label → key fallback
+    expect(solo.children).toEqual([]);
+  });
+
+  it("returns an empty forest for no rows", () => {
+    expect(buildForest([], LEVELS)).toEqual([]);
   });
 });

@@ -3,6 +3,7 @@ import { schema, defineRegistry } from "@json-render/react";
 import { lensActions, lensComponents } from "@modernrelay/notebook-core";
 import { setAtPointer } from "@modernrelay/notebook-core";
 import { Table } from "./components/Table.js";
+import { Tree } from "./components/Tree.js";
 import { Path } from "./components/Path.js";
 import { Subgraph } from "./components/Subgraph.js";
 import { ActionList } from "./components/ActionList.js";
@@ -25,7 +26,8 @@ const catalog = defineCatalog(schema, {
 // React's SetState is `(updater: (prev) => next) => void`. We use the
 // executor's setAtPointer helper to write at JSON-pointer paths immutably.
 const { registry: webRegistry } = defineRegistry(catalog, {
-  components: { Table, Path, Subgraph, ActionList, Form, Timeline, Card, Quote, Text, Button, Toggle, Select, TextInput, NumberInput },
+  components: { Table,
+    Tree, Path, Subgraph, ActionList, Form, Timeline, Card, Quote, Text, Button, Toggle, Select, TextInput, NumberInput },
   actions: {
     setState: async (params, setState) => {
       const { statePath, value } = params as {

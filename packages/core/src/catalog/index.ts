@@ -9,6 +9,13 @@ import {
   type TableRuntimeProps,
 } from "./lenses/table.js";
 import {
+  TreeAuthorPropsSchema,
+  TreeRuntimePropsSchema,
+  TreeDescription,
+  type TreeAuthorProps,
+  type TreeRuntimeProps,
+} from "./lenses/tree.js";
+import {
   PathAuthorPropsSchema,
   PathRuntimePropsSchema,
   PathDescription,
@@ -88,6 +95,7 @@ import {
 } from "./lenses/number_input.js";
 
 export * from "./lenses/table.js";
+export * from "./lenses/tree.js";
 export * from "./lenses/path.js";
 export * from "./lenses/subgraph.js";
 export * from "./lenses/action_list.js";
@@ -129,6 +137,7 @@ export interface QueryResult {
  */
 export const lensComponents = {
   Table:      { props: TableRuntimePropsSchema,      description: TableDescription },
+  Tree:       { props: TreeRuntimePropsSchema,       description: TreeDescription },
   Path:       { props: PathRuntimePropsSchema,       description: PathDescription },
   Subgraph:   { props: SubgraphRuntimePropsSchema,   description: SubgraphDescription },
   ActionList: { props: ActionListRuntimePropsSchema, description: ActionListDescription },
@@ -261,6 +270,11 @@ function buildRuntimeProps(
     case "Table": {
       const author: TableAuthorProps = TableAuthorPropsSchema.parse(authorProps);
       const runtime: TableRuntimeProps = { ...author, rows: result.rows };
+      return runtime as unknown as Record<string, unknown>;
+    }
+    case "Tree": {
+      const author: TreeAuthorProps = TreeAuthorPropsSchema.parse(authorProps);
+      const runtime: TreeRuntimeProps = { ...author, rows: result.rows };
       return runtime as unknown as Record<string, unknown>;
     }
     case "Path": {
