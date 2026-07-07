@@ -14,6 +14,21 @@ export interface AppConfig {
   notebook: ReturnType<typeof parseNotebook>;
   source: Source;
   label: string;
+  /** The shared HTTP facade — the BranchBar drives branch ops through it. */
+  client: Client;
+  /** The boot read/write branch (URL → injected → undefined = server default). */
+  branch: string | undefined;
+  /**
+   * The DECLARED base branch (CLI --branch / operator config — never the URL
+   * param): a `?branch=` reload lands you back ON your working branch, and
+   * merges still target the declared base. Undefined ⇒ main.
+   */
+  declaredBranch: string | undefined;
+  /**
+   * Build a Source targeting `branch` (undefined = server default) with this
+   * session's client + rawGq capability — the branch-switch rebuild path.
+   */
+  makeSource: (branch: string | undefined) => Source;
   /**
    * The committed layout sidecar (`<notebook>.layout.json`), injected by the
    * `view` BFF — the base layer under any personal localStorage tweaks. Null
@@ -91,8 +106,10 @@ export async function buildConfig(): Promise<AppConfig> {
       "Server mode requires top-level `server:` or a `?server=` URL parameter.",
     );
   }
-  const branch =
-    url.searchParams.get("branch") ?? injected.branch ?? undefined;
+  // The URL param is SESSION state (the branch you were working on); the
+  // injected value is the declared base the deployment targets.
+  const declaredBranch = injected.branch ?? undefined;
+  const branch = url.searchParams.get("branch") ?? declaredBranch;
   // rawGq is off by default (operator/production context); enable only via the
   // explicit `?allowRawGq` escape hatch (e.g. `view --allow-raw-gq` forwards it).
   const allowRawGq =
@@ -118,13 +135,22 @@ export async function buildConfig(): Promise<AppConfig> {
       ? pruneOverrides(normalizeOverrides(injected.layout), liveIds)
       : null;
 
+  const makeSource = (target: string | undefined): Source =>
+    new ServerSource(client, {
+      ...(target ? { branch: target } : {}),
+      ...(allowRawGq ? { allowRawGq: true } : {}),
+    });
+
   return {
     notebook,
-    source: new ServerSource(client, {
-      ...(branch ? { branch } : {}),
-      ...(allowRawGq ? { allowRawGq: true } : {}),
-    }),
-    label: `server: ${server} · graph: ${graph}${branch ? ` · ${branch}` : ""}`,
+    source: makeSource(branch),
+    // Branch is session-switchable (BranchBar) — it lives in the chrome, not
+    // the static label.
+    label: `server: ${server} · graph: ${graph}`,
+    client,
+    branch,
+    declaredBranch,
+    makeSource,
     initialLayout,
     canPersistLayout: injected.canPersistLayout === true,
   };

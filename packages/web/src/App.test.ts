@@ -11,7 +11,10 @@ describe("buildConfig", () => {
       "http://127.0.0.1:5173/?server=http://example.test&token=tok&branch=review&graph=acme",
     );
     const config = await buildConfig();
-    expect(config.label).toBe("server: http://example.test · graph: acme · review");
+    // The branch is session-switchable chrome (BranchBar), not part of the
+    // static label — it surfaces on config.branch instead.
+    expect(config.label).toBe("server: http://example.test · graph: acme");
+    expect(config.branch).toBe("review");
     // rawGq is off unless the explicit ?allowRawGq escape hatch is present.
     expect(config.source.capabilities().rawGq).toBe(false);
     expect(storage.get("omnigraph_token")).toBe("tok");

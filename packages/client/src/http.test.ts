@@ -188,3 +188,125 @@ describe("Client (SDK-backed facade)", () => {
     expect(err.message).toMatch(RE_CONFLICT);
   });
 });
+
+describe("branch staging surface", () => {
+  it("createBranch posts and resolves; a 409 (name exists) surfaces as OmnigraphHttpError", async () => {
+    const ok = clientWith(
+      fetchReturning(
+        jsonResponse({ uri: "og://g", from: "main", name: "stage", actor_id: null }),
+      ),
+    );
+    await expect(ok.createBranch("stage")).resolves.toBeUndefined();
+
+    const exists = clientWith(
+      fetchReturning(
+        jsonResponse({ error: "branch 'stage' already exists", code: "conflict" }, 409),
+      ),
+    );
+    await expect(exists.createBranch("stage")).rejects.toMatchObject({
+      name: "OmnigraphHttpError",
+      status: 409,
+    });
+  });
+
+  it("mergeBranch maps the three success outcomes", async () => {
+    for (const outcome of ["already_up_to_date", "fast_forward", "merged"]) {
+      const client = clientWith(
+        fetchReturning(
+          jsonResponse({ source: "stage", target: "main", outcome, actor_id: null }),
+        ),
+      );
+      await expect(client.mergeBranch("stage")).resolves.toEqual({
+        ok: true,
+        outcome,
+      });
+    }
+  });
+
+  it("mergeBranch turns a 409 with merge_conflicts into {ok:false, conflicts}", async () => {
+    const client = clientWith(
+      fetchReturning(
+        jsonResponse(
+          {
+            error: "merge conflicts",
+            code: "conflict",
+            merge_conflicts: [
+              {
+                table_key: "node:Task",
+                row_id: "t1",
+                kind: "DivergentUpdate",
+                message: "status changed on both branches",
+              },
+              {
+                table_key: "edge:AssignedTo",
+                row_id: null,
+                kind: "OrphanEdge",
+                message: "edge target deleted on main",
+              },
+            ],
+          },
+          409,
+        ),
+      ),
+    );
+    const result = await client.mergeBranch("stage", "main");
+    expect(result).toEqual({
+      ok: false,
+      conflicts: [
+        {
+          table_key: "node:Task",
+          row_id: "t1",
+          kind: "DivergentUpdate",
+          message: "status changed on both branches",
+        },
+        {
+          table_key: "edge:AssignedTo",
+          kind: "OrphanEdge",
+          message: "edge target deleted on main",
+        },
+      ],
+    });
+  });
+
+  it("deleteBranch resolves on 2xx", async () => {
+    const client = clientWith(
+      fetchReturning(jsonResponse({ uri: "og://g", name: "stage", actor_id: null })),
+    );
+    await expect(client.deleteBranch("stage")).resolves.toBeUndefined();
+  });
+
+  it("snapshot reshapes tables to {table_key, version, row_count}", async () => {
+    const client = clientWith(
+      fetchReturning(
+        jsonResponse({
+          branch: "stage",
+          manifest_version: 7,
+          tables: [
+            {
+              table_key: "node:Task",
+              table_path: "tables/task",
+              table_version: 16,
+              table_branch: "stage",
+              row_count: 12,
+            },
+            {
+              table_key: "node:Comment",
+              table_path: "tables/comment",
+              table_version: 9,
+              table_branch: null,
+              row_count: 4,
+            },
+          ],
+        }),
+      ),
+    );
+    await expect(client.snapshot("stage")).resolves.toEqual({
+      branch: "stage",
+      manifest_version: 7,
+      tables: [
+        { table_key: "node:Task", version: 16, row_count: 12, writer: "stage" },
+        { table_key: "node:Comment", version: 9, row_count: 4, writer: null },
+      ],
+    });
+  });
+});

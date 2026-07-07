@@ -12,6 +12,7 @@
 
 import {
   Omnigraph,
+  ConflictError,
   NetworkError,
   OmnigraphError,
   type QueryInput as SdkQueryInput,
@@ -72,6 +73,43 @@ export interface ChangeOutput {
 
 export interface BranchListOutput {
   branches: string[];
+}
+
+/** One structured conflict from an all-or-nothing merge attempt (409). */
+export interface MergeConflictInfo {
+  table_key: string;
+  row_id?: string;
+  kind: string;
+  message: string;
+}
+
+/**
+ * Merge result as a discriminated union: conflicts are an EXPECTED outcome of
+ * reviewing staged work, not an exception — the target is untouched on
+ * conflict, so callers render `conflicts` and keep going.
+ */
+export type BranchMergeResult =
+  | { ok: true; outcome: "already_up_to_date" | "fast_forward" | "merged" }
+  | { ok: false; conflicts: MergeConflictInfo[] };
+
+/** Per-table manifest state on a branch — the table-level delta source. */
+export interface SnapshotTableInfo {
+  table_key: string;
+  version: number;
+  row_count: number;
+  /**
+   * The branch lineage that last wrote this table (null = the graph's main
+   * lineage). Version numbers are per-lineage counters, so two DIVERGED
+   * branches can share a version with different contents — the writer is
+   * what disambiguates them.
+   */
+  writer: string | null;
+}
+
+export interface SnapshotOutput {
+  branch: string;
+  manifest_version: number;
+  tables: SnapshotTableInfo[];
 }
 
 export type ParamKind =
@@ -301,6 +339,111 @@ export class Client {
       return { branches: await this.og.branches.list() };
     } catch (e) {
       throw toHttpError(e, "/branches");
+    }
+  }
+
+  /**
+   * Fork `name` off `from` (server default: main). A name collision surfaces
+   * as the usual 409 `OmnigraphHttpError` — callers that want "switch to the
+   * existing branch instead" match on `status === 409`.
+   */
+  async createBranch(
+    name: string,
+    from?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.requireGraph("/branches");
+    try {
+      await this.og.branches.create(
+        { name, ...(from !== undefined ? { from } : {}) },
+        signal ? { signal } : {},
+      );
+    } catch (e) {
+      throw toHttpError(e, "/branches");
+    }
+  }
+
+  /**
+   * Merge `source` into `target` (server default: main). Three-way and
+   * all-or-nothing: on conflict nothing is published and the structured
+   * conflict list comes back as `{ok: false}` rather than a throw.
+   */
+  async mergeBranch(
+    source: string,
+    target?: string,
+    signal?: AbortSignal,
+  ): Promise<BranchMergeResult> {
+    this.requireGraph("/branches/merge");
+    try {
+      const r = await this.og.branches.merge(
+        { source, ...(target !== undefined ? { target } : {}) },
+        signal ? { signal } : {},
+      );
+      return {
+        ok: true,
+        outcome: r.outcome as "already_up_to_date" | "fast_forward" | "merged",
+      };
+    } catch (e) {
+      if (e instanceof ConflictError) {
+        // SDK 0.7.0 reads `body?.mergeConflicts` but the server sends
+        // snake_case `merge_conflicts` (error bodies aren't camelized), so
+        // `e.mergeConflicts` is always undefined — fall back to the raw body.
+        const raw = (e.body as { merge_conflicts?: unknown } | undefined)
+          ?.merge_conflicts;
+        const entries =
+          e.mergeConflicts?.map((c) => ({
+            table_key: c.tableKey,
+            ...(c.rowId != null ? { row_id: c.rowId } : {}),
+            kind: String(c.kind),
+            message: c.message,
+          })) ??
+          (Array.isArray(raw)
+            ? (raw as Record<string, unknown>[]).map((c) => ({
+                table_key: String(c.table_key ?? ""),
+                ...(c.row_id != null ? { row_id: String(c.row_id) } : {}),
+                kind: String(c.kind ?? "conflict"),
+                message: String(c.message ?? ""),
+              }))
+            : undefined);
+        if (entries !== undefined) return { ok: false, conflicts: entries };
+      }
+      throw toHttpError(e, "/branches/merge");
+    }
+  }
+
+  /** Delete a branch pointer. Idempotent server-side (missing = no-op). */
+  async deleteBranch(name: string, signal?: AbortSignal): Promise<void> {
+    this.requireGraph(`/branches/${name}`);
+    try {
+      await this.og.branches.delete(name, signal ? { signal } : {});
+    } catch (e) {
+      throw toHttpError(e, `/branches/${name}`);
+    }
+  }
+
+  /**
+   * Latest-commit manifest state of a branch: per-table version + row count.
+   * Two snapshots (branch vs its base) make the table-level change summary.
+   */
+  async snapshot(branch?: string, signal?: AbortSignal): Promise<SnapshotOutput> {
+    this.requireGraph("/snapshot");
+    try {
+      const r = await this.og.snapshot(
+        branch !== undefined ? { branch } : {},
+        signal ? { signal } : {},
+      );
+      return {
+        branch: r.branch,
+        manifest_version: r.manifestVersion,
+        tables: r.tables.map((t) => ({
+          table_key: t.tableKey,
+          version: t.tableVersion,
+          row_count: t.rowCount,
+          writer: t.tableBranch ?? null,
+        })),
+      };
+    } catch (e) {
+      throw toHttpError(e, "/snapshot");
     }
   }
 

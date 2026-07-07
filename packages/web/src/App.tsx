@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Responsive, WidthProvider, type Layout } from "react-grid-layout/legacy";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import {
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToastProvider, useToastManager } from "@/components/ui/toast";
+import { BranchBar } from "./components/BranchBar.js";
 import { cn } from "@/lib/utils";
 import {
   CheckIcon,
@@ -154,12 +155,64 @@ export function App(): React.ReactElement {
       </Shell>
     );
   }
-  return <RuntimeApp config={configStatus.config} />;
+  return <BranchedApp config={configStatus.config} />;
 }
 
-function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
+/**
+ * Session branch staging: the active branch is React state ABOVE the runtime.
+ * Switching remounts RuntimeApp (key) with a source/runtime targeting the new
+ * branch, carrying the previous `$state` (selections survive). The URL's
+ * `?branch=` follows so reload/share stays on the branch.
+ */
+function BranchedApp({ config }: { config: AppConfig }): React.ReactElement {
+  // Base = the DECLARED branch (never the URL param), so booting via
+  // `?branch=work-x` still offers "merge into <base>".
+  const baseBranch = config.declaredBranch ?? "main";
+  const [sessionBranch, setSessionBranch] = useState(config.branch ?? baseBranch);
+  const carriedState = useRef<Record<string, unknown> | undefined>(undefined);
+  const switchBranch = useCallback(
+    (branch: string, state: Record<string, unknown>) => {
+      carriedState.current = state;
+      const url = new URL(window.location.href);
+      if (branch === baseBranch) url.searchParams.delete("branch");
+      else url.searchParams.set("branch", branch);
+      window.history.replaceState(null, "", url);
+      setSessionBranch(branch);
+    },
+    [baseBranch],
+  );
+  return (
+    <RuntimeApp
+      key={sessionBranch}
+      config={config}
+      branch={sessionBranch}
+      baseBranch={baseBranch}
+      initialState={carriedState.current}
+      onSwitchBranch={switchBranch}
+    />
+  );
+}
+
+function RuntimeApp({
+  config,
+  branch,
+  baseBranch,
+  initialState,
+  onSwitchBranch,
+}: {
+  config: AppConfig;
+  branch: string;
+  baseBranch: string;
+  initialState: Record<string, unknown> | undefined;
+  onSwitchBranch: (branch: string, state: Record<string, unknown>) => void;
+}): React.ReactElement {
   const [runtime] = useState(() =>
-    createNotebookRuntime({ notebook: config.notebook, source: config.source }),
+    createNotebookRuntime({
+      notebook: config.notebook,
+      source: config.makeSource(branch),
+      defaultTarget: { branch },
+      ...(initialState !== undefined ? { initialState } : {}),
+    }),
   );
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() =>
     runtime.getSnapshot(),
@@ -426,6 +479,12 @@ function RuntimeApp({ config }: { config: AppConfig }): React.ReactElement {
                   {savingLayout ? "Saving…" : "Save layout"}
                 </Button>
               )}
+              <BranchBar
+                client={config.client}
+                current={branch}
+                baseBranch={baseBranch}
+                onSwitch={(next) => onSwitchBranch(next, snapshot.state)}
+              />
               <Button
                 type="button"
                 variant="outline"
