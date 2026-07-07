@@ -15,7 +15,7 @@ Two bets make it work:
 
 ## Commands
 
-This is a pnpm workspace (pnpm 10.30.3, Node ≥20). All scripts run from the repo root unless noted.
+This is a pnpm workspace (pnpm 10.30.3, Node ≥22). All scripts run from the repo root unless noted.
 
 ```bash
 pnpm install                                     # install workspace deps
