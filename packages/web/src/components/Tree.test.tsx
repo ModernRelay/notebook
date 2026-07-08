@@ -67,10 +67,19 @@ function mount(spec: ReturnType<typeof treeSpec>): {
   return { host, root, rerender: render };
 }
 
-const itemByLabel = (host: HTMLElement, label: string): HTMLElement | undefined =>
-  Array.from(host.querySelectorAll<HTMLElement>('[role="treeitem"]')).find(
-    (el) => el.textContent?.includes(label),
-  );
+const itemByLabel = (host: HTMLElement, label: string): HTMLElement => {
+  const el = Array.from(
+    host.querySelectorAll<HTMLElement>('[role="treeitem"]'),
+  ).find((it) => it.textContent?.includes(label));
+  if (el === undefined) {
+    throw new Error(`no treeitem labeled "${label}" — tree has: ${Array.from(
+      host.querySelectorAll('[role="treeitem"]'),
+    )
+      .map((it) => it.textContent)
+      .join(" | ")}`);
+  }
+  return el;
+};
 
 const click = (el: HTMLElement): void => {
   act(() => {
@@ -101,10 +110,10 @@ describe("Tree lens (web, headless-tree)", () => {
     expect(host.querySelector('[role="tree"]')).toBeTruthy();
     const items = Array.from(host.querySelectorAll('[role="treeitem"]'));
     expect(items.length).toBeGreaterThanOrEqual(7); // 2 domains + 3 concepts + leaves
-    const systems = itemByLabel(host, "Systems")!;
+    const systems = itemByLabel(host, "Systems");
     expect(systems.getAttribute("aria-level")).toBe("1");
     expect(systems.getAttribute("aria-expanded")).toBe("true");
-    const loops = itemByLabel(host, "Feedback loops")!;
+    const loops = itemByLabel(host, "Feedback loops");
     expect(loops.getAttribute("aria-level")).toBe("2");
     // count badges: Systems (2 concepts), Feedback loops (2 related)
     expect(systems.textContent).toContain("2");
@@ -118,7 +127,7 @@ describe("Tree lens (web, headless-tree)", () => {
   it("row click collapses an expanded branch", () => {
     const { host, root } = mount(treeSpec());
     expect(host.textContent).toContain("Chunking");
-    click(itemByLabel(host, "Systems")!);
+    click(itemByLabel(host, "Systems"));
     expect(host.textContent).not.toContain("Chunking");
     expect(host.textContent).toContain("Bias"); // Cognitive untouched
     act(() => root.unmount());
@@ -135,25 +144,25 @@ describe("Tree lens (web, headless-tree)", () => {
     const { host, root } = mount(treeSpec());
     // duplicate-entity case FIRST (a later Chunking click collapses its
     // subtree, hiding one Attractors occurrence): both occurrences highlight
-    click(itemByLabel(host, "Attractors")!);
+    click(itemByLabel(host, "Attractors"));
     const attractors = Array.from(
       host.querySelectorAll<HTMLElement>('[role="treeitem"]'),
     ).filter((el) => el.textContent?.includes("Attractors"));
     expect(attractors.length).toBe(2);
     for (const el of attractors) expect(el.className).toContain("bg-accent");
     // single-entity: clicking Chunking moves the selection (and toggles it)
-    click(itemByLabel(host, "Chunking")!);
-    expect(itemByLabel(host, "Chunking")!.className).toContain("bg-accent");
-    expect(itemByLabel(host, "Systems")!.className).not.toContain("bg-accent");
+    click(itemByLabel(host, "Chunking"));
+    expect(itemByLabel(host, "Chunking").className).toContain("bg-accent");
+    expect(itemByLabel(host, "Systems").className).not.toContain("bg-accent");
     act(() => root.unmount());
   });
 
   it("keyboard: ArrowDown moves focus; ArrowRight expands a collapsed folder", () => {
     const { host, root } = mount(treeSpec({ expand_depth: 1 }));
-    const systems = itemByLabel(host, "Systems")!;
+    const systems = itemByLabel(host, "Systems");
     act(() => systems.focus());
     key(systems, "ArrowDown");
-    const loops = itemByLabel(host, "Feedback loops")!;
+    const loops = itemByLabel(host, "Feedback loops");
     expect(loops.getAttribute("tabindex")).toBe("0"); // roving focus moved
     expect(loops.getAttribute("aria-expanded")).toBe("false");
     act(() => loops.focus());
@@ -164,19 +173,19 @@ describe("Tree lens (web, headless-tree)", () => {
 
   it("typeahead opens search and marks matches", () => {
     const { host, root } = mount(treeSpec());
-    const systems = itemByLabel(host, "Systems")!;
+    const systems = itemByLabel(host, "Systems");
     act(() => systems.focus());
     key(systems, "b", "KeyB"); // typeahead matches the event CODE
     const input = host.querySelector('input[aria-label="Search tree"]');
     expect(input).toBeTruthy();
-    const bias = itemByLabel(host, "Bias")!;
+    const bias = itemByLabel(host, "Bias");
     expect(bias.className).toContain("ring-primary");
     act(() => root.unmount());
   });
 
   it("re-read rows keep the default-open policy for NEW branches; user toggles survive", () => {
     const { host, root, rerender } = mount(treeSpec());
-    click(itemByLabel(host, "Systems")!); // user collapses Systems
+    click(itemByLabel(host, "Systems")); // user collapses Systems
     expect(host.textContent).not.toContain("Chunking");
     rerender(
       treeSpec({}, [

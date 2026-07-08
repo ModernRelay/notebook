@@ -72,20 +72,31 @@ export function Tree({
   const [userToggled, setUserToggled] = useState<Map<string, boolean>>(
     () => new Map(),
   );
-  const expandedItems = useMemo(() => {
-    const open: string[] = [ROOT_ID];
-    for (const node of byPath.values()) {
-      if (node.path === ROOT_ID) continue;
-      if (userToggled.get(node.path) ?? defaultOpen(node)) open.push(node.path);
-    }
-    return open;
-  }, [byPath, userToggled, defaultOpen]);
+  const computeExpanded = useCallback(
+    (toggled: ReadonlyMap<string, boolean>): string[] => {
+      const open: string[] = [ROOT_ID];
+      for (const node of byPath.values()) {
+        if (node.path === ROOT_ID) continue;
+        if (toggled.get(node.path) ?? defaultOpen(node)) open.push(node.path);
+      }
+      return open;
+    },
+    [byPath, defaultOpen],
+  );
+  const expandedItems = useMemo(
+    () => computeExpanded(userToggled),
+    [computeExpanded, userToggled],
+  );
   const setExpandedItems = useCallback(
     (updater: string[] | ((prev: string[]) => string[])) => {
+      // "Current" is derived INSIDE the state updater from the accumulated
+      // toggle map, so a functional updater sees the true latest expansion
+      // even across batched sequential calls (not a render-time snapshot).
       setUserToggled((prevToggled) => {
-        const current = new Set(expandedItems);
+        const currentArr = computeExpanded(prevToggled);
+        const current = new Set(currentArr);
         const nextArr =
-          typeof updater === "function" ? updater(expandedItems) : updater;
+          typeof updater === "function" ? updater(currentArr) : updater;
         const next = new Set(nextArr);
         const toggled = new Map(prevToggled);
         for (const path of next) {
@@ -97,7 +108,7 @@ export function Tree({
         return toggled;
       });
     },
-    [expandedItems],
+    [computeExpanded],
   );
 
   // Entity-level selection: every path whose key matches the bound value.
@@ -132,14 +143,12 @@ export function Tree({
     state: { expandedItems, selectedItems },
     setExpandedItems,
     // Selection is driven exclusively through the entity key in notebook
-    // state (dispatch → useStateValue → derived selectedItems), so the
-    // internal setter maps the picked path back to its key.
-    setSelectedItems: (updater) => {
-      const ids =
-        typeof updater === "function" ? updater(selectedItems) : updater;
-      const first = ids[0] !== undefined ? byPath.get(ids[0]) : undefined;
-      if (first !== undefined) dispatchSelect(first.key);
-    },
+    // state (dispatch → useStateValue → derived selectedItems). The single
+    // dispatch site is onPrimaryAction — both click and Enter route through
+    // primaryAction, and dispatching from setSelectedItems too would double
+    // the state patch (two invalidation cycles per click). The setter is
+    // still required for controlled state; it intentionally does nothing.
+    setSelectedItems: () => {},
     onPrimaryAction: (item) => {
       const data = item.getItemData();
       if (data !== undefined) dispatchSelect(data.key);
