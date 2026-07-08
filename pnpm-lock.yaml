@@ -144,6 +144,12 @@ importers:
       '@fontsource-variable/urbanist':
         specifier: ^5.2.7
         version: 5.2.7
+      '@headless-tree/core':
+        specifier: ^1.7.0
+        version: 1.7.0
+      '@headless-tree/react':
+        specifier: ^1.7.0
+        version: 1.7.0(@headless-tree/core@1.7.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@json-render/core':
         specifier: ^0.19.0
         version: 0.19.0(zod@4.4.3)
@@ -437,6 +443,16 @@ packages:
 
   '@fontsource-variable/urbanist@5.2.7':
     resolution: {integrity: sha512-OYeUoBQhwm3pbXG5yUxq1omO9H64Dx1eKxldKYOztrf+8GFG1vu3FP/zZpmFOwtgsPj2h6JYHX9VVWopSxvOyQ==}
+
+  '@headless-tree/core@1.7.0':
+    resolution: {integrity: sha512-LxcX7LNepwfOPrZcs4PNfDwCzbi326uCAX5jYBfw94jI+pZQA7ANaE/No3LW0XFgcBcQtK/G2bInbVEhLF1C/Q==}
+
+  '@headless-tree/react@1.7.0':
+    resolution: {integrity: sha512-hcnG4mpTP98KVWZYqKsXNOoiv7ZQqZVM2jWwzEWtF+VDSz+1O/juMI+/Q0G4lZM+ez07/tmBBWjvZub/mLAUXQ==}
+    peerDependencies:
+      '@headless-tree/core': '*'
+      react: '*'
+      react-dom: '*'
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2026,6 +2042,14 @@ snapshots:
   '@fontsource-variable/jetbrains-mono@5.2.8': {}
 
   '@fontsource-variable/urbanist@5.2.7': {}
+
+  '@headless-tree/core@1.7.0': {}
+
+  '@headless-tree/react@1.7.0(@headless-tree/core@1.7.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+    dependencies:
+      '@headless-tree/core': 1.7.0
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
