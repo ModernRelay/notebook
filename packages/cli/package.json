@@ -1,6 +1,6 @@
 {
   "name": "@modernrelay/notebook",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Run an omnigraph notebook in your terminal or browser, validate it, and inspect it as JSON — one installable CLI over the omnigraph notebook stack.",
   "license": "Apache-2.0",
   "type": "module",
@@ -8,9 +8,9 @@
     "node": ">=22"
   },
   "bin": {
-    "notebook": "./dist/cli.js",
-    "mr-notebook": "./dist/cli.js",
-    "omnigraph-notebook": "./dist/cli.js"
+    "notebook": "dist/cli.js",
+    "mr-notebook": "dist/cli.js",
+    "omnigraph-notebook": "dist/cli.js"
   },
   "files": [
     "dist",
