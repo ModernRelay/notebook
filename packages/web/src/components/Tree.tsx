@@ -211,7 +211,7 @@ export function Tree({
             >
               <span
                 aria-hidden
-                className="w-4 shrink-0 text-xs text-muted-foreground"
+                className="flex w-6 shrink-0 items-center justify-center text-lg leading-none text-muted-foreground"
               >
                 {isFolder ? (isOpen ? "▾" : "▸") : ""}
               </span>
