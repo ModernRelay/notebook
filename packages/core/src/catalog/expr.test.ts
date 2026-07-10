@@ -38,6 +38,8 @@ describe("evaluateExpr", () => {
   it("returns null instead of NaN/throwing on bad input", () => {
     expect(evaluateExpr('num("missing")', { row, nowMs: NOW })).toBeNull();
     expect(evaluateExpr('num("empty")', { row, nowMs: NOW })).toBeNull();
+    expect(evaluateExpr('num("flag")', { row: { flag: true }, nowMs: NOW })).toBeNull();
+    expect(evaluateExpr('num("blank")', { row: { blank: "   " }, nowMs: NOW })).toBeNull();
     expect(evaluateExpr('days_since("empty")', { row, nowMs: NOW })).toBeNull();
     expect(evaluateExpr("1 +", { row, nowMs: NOW })).toBeNull();
     expect(evaluateExpr("window.alert(1)", { row, nowMs: NOW })).toBeNull();

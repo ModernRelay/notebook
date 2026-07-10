@@ -186,7 +186,8 @@ class Parser {
         if (args.length !== 1 || typeof args[0] !== "string")
           throw new Error('num() takes one column name, e.g. num("score")');
         const raw = this.ctx.row[args[0]];
-        if (raw === null || raw === undefined || raw === "") return NaN;
+        if (typeof raw === "number") return raw;
+        if (typeof raw !== "string" || raw.trim() === "") return NaN;
         return Number(raw);
       }
       case "days_since": {
