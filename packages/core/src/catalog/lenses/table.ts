@@ -62,6 +62,9 @@ export const TableRuntimePropsSchema = TableAuthorPropsSchema.extend({
 });
 export type TableRuntimeProps = z.infer<typeof TableRuntimePropsSchema>;
 
+/** Fixed locale so string sort order is identical in the Node TUI and any browser. */
+const collator = new Intl.Collator("en");
+
 /**
  * Materialize `expr` columns into the rows and apply the author's `sort`.
  * Runs once per query refresh (in buildRuntimeProps), so web and TUI render
@@ -106,7 +109,7 @@ export function applyTableDerivations(
         const cmp =
           !Number.isNaN(an) && !Number.isNaN(bn)
             ? an - bn
-            : String(av).localeCompare(String(bv));
+            : collator.compare(String(av), String(bv));
         return cmp !== 0 ? sign * cmp : a.index - b.index;
       })
       .map((entry) => entry.row);
