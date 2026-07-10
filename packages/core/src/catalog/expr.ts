@@ -202,8 +202,8 @@ class Parser {
           throw new Error(
             "tier() wants tier(x, t1, v1, ..., default) — pairs plus a default",
           );
-        if (args.some((a) => typeof a !== "number"))
-          throw new Error("tier() arguments must be numeric");
+        if (args.some((a) => typeof a !== "number" || !Number.isFinite(a)))
+          throw new Error("tier() arguments must be finite numeric values");
         const nums = args as number[];
         const x = nums[0]!;
         for (let i = 1; i < nums.length - 1; i += 2) {

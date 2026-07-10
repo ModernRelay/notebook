@@ -35,6 +35,12 @@ describe("evaluateExpr", () => {
     expect(evaluateExpr(src, { row: { x: 99 }, nowMs: NOW })).toBe(0.05);
   });
 
+  it("tier() blanks instead of returning the default when x is not numeric", () => {
+    const src = "tier(num(\"x\"), 1, 1.0, 3, 0.75, 0.05)";
+    expect(evaluateExpr(src, { row: { x: true }, nowMs: NOW })).toBeNull();
+    expect(evaluateExpr(src, { row: {}, nowMs: NOW })).toBeNull();
+  });
+
   it("returns null instead of NaN/throwing on bad input", () => {
     expect(evaluateExpr('num("missing")', { row, nowMs: NOW })).toBeNull();
     expect(evaluateExpr('num("empty")', { row, nowMs: NOW })).toBeNull();
