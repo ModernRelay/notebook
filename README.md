@@ -1,4 +1,4 @@
-# @modernrelay/notebook
+# @modernrelay/notebook Generate UI notebooks for Omnigraph
 
 [![npm](https://img.shields.io/npm/v/@modernrelay/notebook.svg)](https://www.npmjs.com/package/@modernrelay/notebook)
 
