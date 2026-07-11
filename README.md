@@ -1,4 +1,4 @@
-# @modernrelay/notebook Generate UI notebooks for Omnigraph
+# @modernrelay/notebook 
 
 [![npm](https://img.shields.io/npm/v/@modernrelay/notebook.svg)](https://www.npmjs.com/package/@modernrelay/notebook)
 
@@ -6,7 +6,7 @@
 npm i -g @modernrelay/notebook   # or: npx @modernrelay/notebook view my.notebook.yaml
 ```
 
-Notebook UI for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each notebook cell is a typed *lens primitive* (Table, Path, Subgraph) rendered from a server-owned catalog query — not a generic graph viewer.
+Generative UI notebooks for [OmniGraph](https://github.com/ModernRelay/omnigraph). Each notebook cell is a typed *lens primitive* (Table, Path, Subgraph) rendered from a server-owned catalog query — not a generic graph viewer.
 
 One catalog of components, two renderers (terminal and web), one server-backed runtime.
 
