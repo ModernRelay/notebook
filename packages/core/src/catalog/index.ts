@@ -5,6 +5,7 @@ import {
   TableAuthorPropsSchema,
   TableRuntimePropsSchema,
   TableDescription,
+  applyTableDerivations,
   type TableAuthorProps,
   type TableRuntimeProps,
 } from "./lenses/table.js";
@@ -269,7 +270,12 @@ function buildRuntimeProps(
   switch (lens) {
     case "Table": {
       const author: TableAuthorProps = TableAuthorPropsSchema.parse(authorProps);
-      const runtime: TableRuntimeProps = { ...author, rows: result.rows };
+      // Derived (expr) columns and author sort are materialized here, per
+      // query refresh, so every renderer (web, TUI) shows identical values.
+      const runtime: TableRuntimeProps = {
+        ...author,
+        rows: applyTableDerivations(author, result.rows, Date.now()),
+      };
       return runtime as unknown as Record<string, unknown>;
     }
     case "Tree": {
